@@ -5,6 +5,47 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// Função para login tradicional (username/password)
+export async function signInTraditional(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email,
+    password: password,
+  })
+  return { data, error }
+}
+
+// Função para verificar se é admin pelo email
+const ADMIN_EMAILS = ['admin@controle-ponto.com', 'administrador@controle-ponto.com']
+
+export function isAdminByEmail(user) {
+  if (!user) return false
+  return ADMIN_EMAILS.includes(user.email)
+}
+
+// Função para obter role do usuário (admin ou funcionario)
+export async function getUserRole() {
+  const { data: { user} } = await supabase.auth.getUser()
+  if (!user) return null
+
+  // Primeiro verifica por email admin
+  if (isAdminByEmail(user)) return 'admin'
+
+  // Verifica metadata do Supabase Auth
+  if (user.user_metadata && user.user_metadata.role === 'admin') return 'admin'
+
+  return 'funcionario'
+}
+
+// Manter funções antigas para compatibilidade
+export function isAdmin(user) {
+  if (!user) return false
+  // Check if email is in admin list
+  if (ADMIN_EMAILS.includes(user?.email)) return true
+  // Check Supabase for role
+  return false
+}
+
+// Manter funções antigas para compatibilidade
 export async function getFuncionarios() {
   const { data, error } = await supabase
     .from('funcionarios')

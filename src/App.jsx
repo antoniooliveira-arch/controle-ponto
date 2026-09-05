@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react'
 import Header from './components/Header'
 import RegistroPonto from './components/RegistroPonto'
 import Mapa from './components/Mapa'
+import Dashboard from './pages/Dashboard'
+import Login from './pages/Login'
 
 export default function App() {
   const [pagina, setPagina] = useState('ponto')
 
   useEffect(() => {
     // Verificar autenticação ao carregar
-    // Em produção, verificar sessão here
   }, [])
 
   const pages = {
@@ -39,7 +40,12 @@ export default function App() {
     dashboard: (
       <div>
         <Header />
-        <p>Painel Administrativo - em desenvolvimento</p>
+        <Dashboard />
+      </div>
+    ),
+    login: (
+      <div>
+        <Login />
       </div>
     )
   }
@@ -48,6 +54,20 @@ export default function App() {
     <div>
       <nav style={{ padding: '1rem', background: '#18181b', color: 'white' }}>
         <div style={{ display: 'flex', gap: '2rem' }}>
+          <button
+            onClick={() => setPagina('login')}
+            style={{
+              padding: '0.5rem 1rem',
+              border: 'none',
+              background: pagina === 'login' ? '#3b82f6' : 'transparent',
+              color: pagina === 'login' ? 'white' : '#d1d5db',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: pagina === 'login' ? 500 : 400
+            }}
+          >
+            Login
+          </button>
           <button
             onClick={() => setPagina('ponto')}
             style={{
