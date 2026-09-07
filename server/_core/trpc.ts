@@ -5,14 +5,6 @@ import type { TrpcContext } from "./context";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
-  errorFormatter({ shape, error }) {
-    const root = (error.cause?.cause ?? error.cause ?? error) as { message?: string; code?: string; stack?: string } | undefined;
-    return {
-      ...shape,
-      message: root?.message ? `${shape.message}\nCAUSE: ${root.message}` : shape.message,
-      stack: root?.stack,
-    };
-  },
 });
 
 export const router = t.router;

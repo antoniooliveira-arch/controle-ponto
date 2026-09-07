@@ -548,16 +548,7 @@ async function notifyOwner(payload) {
 import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
 import superjson from "superjson";
 var t = initTRPC.context().create({
-  transformer: superjson,
-  errorFormatter({ shape, error }) {
-    const root = error.cause?.cause ?? error.cause ?? error;
-    return {
-      ...shape,
-      message: root?.message ? `${shape.message}
-CAUSE: ${root.message}` : shape.message,
-      stack: root?.stack
-    };
-  }
+  transformer: superjson
 });
 var router = t.router;
 var publicProcedure = t.procedure;
