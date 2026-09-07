@@ -4,19 +4,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
   "framework": "vite",
-  "functions": {
-    "api/index.ts": {
-      "runtime": "nodejs22.x",
-      "maxDuration": 30
-    }
-  },
   "rewrites": [
     {
       "source": "/api/(.*)",
       "destination": "/api/index"
-    },
-    {
-      "handle": "filesystem"
     },
     {
       "source": "/(.*)",
