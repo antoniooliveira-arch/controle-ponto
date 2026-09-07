@@ -1,8 +1,9 @@
 import "dotenv/config";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
+import { sql } from "drizzle-orm";
 import { users } from "../drizzle/schema";
 import { hashPassword } from "../server/security";
 
@@ -29,20 +30,25 @@ async function main() {
     await db
       .select()
       .from(users)
-      .where(and(eq(users.email, login), eq(users.role, "admin")))
+      .where(
+        and(
+          or(eq(users.email, login), sql`lower(${users.name}) = ${login}`, eq(users.openId, "sme-admin")),
+          eq(users.role, "admin"),
+        ),
+      )
       .limit(1)
   )[0];
 
   if (existing) {
     await db
       .update(users)
-      .set({ passwordHash, passwordFailures: 0, lockedUntil: null, role: "admin", name: "Administrador", updatedAt: new Date() })
+      .set({ passwordHash, passwordFailures: 0, lockedUntil: null, role: "admin", name: login, updatedAt: new Date() })
       .where(eq(users.id, existing.id));
     console.log(`[admin] Credenciais atualizadas para o usuário existente #${existing.id}`);
   } else {
     await db.insert(users).values({
       openId: "sme-admin",
-      name: "Administrador",
+      name: login,
       email: login,
       loginMethod: "sistema",
       role: "admin",
