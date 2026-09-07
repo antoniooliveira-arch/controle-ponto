@@ -550,11 +550,12 @@ import superjson from "superjson";
 var t = initTRPC.context().create({
   transformer: superjson,
   errorFormatter({ shape, error }) {
-    const cause = error.cause ?? error;
+    const root = error.cause?.cause ?? error.cause ?? error;
     return {
       ...shape,
-      message: cause?.message ? `${shape.message}
-CAUSE: ${cause.message}` : shape.message
+      message: root?.message ? `${shape.message}
+CAUSE: ${root.message}` : shape.message,
+      stack: root?.stack
     };
   }
 });
