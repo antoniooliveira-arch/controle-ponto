@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { QRCodeSVG } from "qrcode.react";
 import { PUNCH_LABELS, PUNCH_MARKS, PUNCH_SHORT_LABELS, formatDate, formatDuration, formatTime, recordTime, type PunchType } from "@/lib/attendance";
 import { trpc } from "@/lib/trpc";
 import { CircleAlert, Clock3, Eye, EyeOff, FileCheck2, Loader2, LogOut, Settings2, ShieldCheck, Timer } from "lucide-react";
@@ -119,6 +120,16 @@ function LoginScreen() {
 
             <div className="mt-5 text-center">
               <Button type="button" variant="link" onClick={() => toast.info("Para redefinir sua senha, procure o administrador responsável pelo cadastro.")} className="h-auto p-0 text-xs font-semibold text-[#2e7d4e] underline-offset-4 hover:text-[#1d4a2f]">Esqueceu sua senha?</Button>
+            </div>
+
+            <div className="mt-6 border-t border-[#eef0ea] pt-4">
+              <button type="button" onClick={() => { navigator.clipboard.writeText(window.location.origin); toast.success("Link do aplicativo copiado."); }} className="flex w-full items-center gap-3 text-left transition-opacity hover:opacity-80">
+                <QRCodeSVG value={window.location.origin} size={72} fgColor="#1d4a2f" bgColor="transparent" className="shrink-0 rounded-lg border border-[#e5e7e0] p-1" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-[#1d4a2f]">Acessar no celular</span>
+                  <span className="mt-1 block text-xs leading-relaxed text-stone-500">Escaneie o QR Code ou toque para copiar o link e abrir o aplicativo rapidamente.</span>
+                </span>
+              </button>
             </div>
 
             {employees.isError ? <div className="mt-6 border-t border-[#eef0ea] pt-4"><p className="text-sm leading-relaxed text-stone-600">Não foi possível carregar a lista de servidores.</p><Button type="button" variant="link" onClick={() => employees.refetch()} className="mt-1 h-auto p-0 text-xs font-semibold text-[#2e7d4e]">Tentar novamente</Button></div> : !employees.isLoading && !employees.data?.length ? <p className="mt-6 border-t border-[#eef0ea] pt-4 text-sm leading-relaxed text-stone-600">Ainda não há servidores ativos. Solicite ao administrador o seu cadastro.</p> : <p className="mt-6 border-t border-[#eef0ea] pt-4 text-xs leading-relaxed text-stone-500">Sua senha é processada de forma protegida. O sistema não armazena senhas em texto aberto.</p>}
