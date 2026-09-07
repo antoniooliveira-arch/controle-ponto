@@ -474,6 +474,11 @@ async function resetEmployeePassword(employeeId, password) {
   await db.update(employees).set({ passwordHash: await hashPassword(password), passwordFailures: 0, lockedUntil: null }).where(eq(employees.id, employeeId));
   await db.update(employeeSessions).set({ revokedAt: /* @__PURE__ */ new Date() }).where(eq(employeeSessions.employeeId, employeeId));
 }
+async function changeOwnAdminPassword(adminId, password) {
+  const db = await requireDb();
+  await db.update(users).set({ passwordHash: await hashPassword(password), passwordFailures: 0, lockedUntil: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq(users.id, adminId));
+  await db.update(userSessions).set({ revokedAt: /* @__PURE__ */ new Date() }).where(eq(userSessions.userId, adminId));
+}
 async function getAdminDashboard(businessDate = getBusinessDate()) {
   const db = await requireDb();
   const employeeRows = await db.select({ employee: employees, sectorName: sectors.name }).from(employees).leftJoin(sectors, eq(employees.sectorId, sectors.id)).where(eq(employees.active, true)).orderBy(asc(employees.fullName));
@@ -777,6 +782,10 @@ var appRouter = router({
       active: z2.boolean()
     })).mutation(({ input }) => updateEmployee(input.employeeId, input)),
     resetPassword: adminProcedure.input(z2.object({ employeeId: z2.number().int().positive(), password: passwordSchema })).mutation(({ input }) => resetEmployeePassword(input.employeeId, input.password)),
+    changeOwnPassword: adminProcedure.input(z2.object({ password: passwordSchema })).mutation(async ({ ctx, input }) => {
+      await changeOwnAdminPassword(ctx.user.id, input.password);
+      return { success: true };
+    }),
     report: adminProcedure.input(z2.object({ startDate: dateSchema, endDate: dateSchema, employeeId: z2.number().int().positive().optional() })).query(({ input }) => {
       if (input.startDate > input.endDate) throw new TRPCError3({ code: "BAD_REQUEST", message: "O per\xEDodo informado \xE9 inv\xE1lido." });
       return getAttendanceReport(input);

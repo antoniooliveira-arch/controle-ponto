@@ -23,12 +23,41 @@ const statusStyle = {
 function AdminHeader({ tab, setTab }: { tab: Tab; setTab: (tab: Tab) => void }) {
   const [, setLocation] = useLocation();
   const { user, logout } = useAuth();
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const items: { id: Tab; label: string; icon: typeof BarChart3 }[] = [
     { id: "overview", label: "Pontos de hoje", icon: BarChart3 },
     { id: "people", label: "Servidores", icon: Users },
     { id: "reports", label: "Relatórios", icon: FileBarChart },
   ];
-  return <header className="admin-header"><div className="flex min-w-0 items-center gap-4"><button onClick={() => setLocation("/")} className="grid h-9 w-9 shrink-0 place-items-center border border-stone-900/30 text-stone-900 transition-colors hover:bg-stone-900 hover:text-white" aria-label="Voltar ao ponto"><ArrowLeft className="h-4 w-4" /></button><div className="min-w-0"><p className="tiny-label">Administração</p><h1 className="truncate font-serif text-2xl font-semibold">Controle de ponto</h1></div></div><nav className="order-3 flex w-full gap-1 border-t border-stone-900/10 pt-3 lg:order-none lg:w-auto lg:border-0 lg:pt-0">{items.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={`admin-nav-item ${tab === item.id ? "admin-nav-item-active" : ""}`}><item.icon className="h-3.5 w-3.5" /><span>{item.label}</span></button>)}</nav><div className="ml-auto flex items-center gap-3"><div className="hidden text-right sm:block"><p className="text-sm font-medium">{user?.name ?? "Administrador"}</p><p className="tiny-label mt-1">Acesso administrativo</p></div><Button variant="ghost" size="icon" onClick={logout} title="Sair da administração"><LogOut className="h-4 w-4" /></Button></div></header>;
+  return <header className="admin-header"><div className="flex min-w-0 items-center gap-4"><button onClick={() => setLocation("/")} className="grid h-9 w-9 shrink-0 place-items-center border border-stone-900/30 text-stone-900 transition-colors hover:bg-stone-900 hover:text-white" aria-label="Voltar ao ponto"><ArrowLeft className="h-4 w-4" /></button><div className="min-w-0"><p className="tiny-label">Administração</p><h1 className="truncate font-serif text-2xl font-semibold">Controle de ponto</h1></div></div><nav className="order-3 flex w-full gap-1 border-t border-stone-900/10 pt-3 lg:order-none lg:w-auto lg:border-0 lg:pt-0">{items.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={`admin-nav-item ${tab === item.id ? "admin-nav-item-active" : ""}`}><item.icon className="h-3.5 w-3.5" /><span>{item.label}</span></button>)}</nav><div className="ml-auto flex items-center gap-3"><div className="hidden text-right sm:block"><p className="text-sm font-medium">{user?.name ?? "Administrador"}</p><p className="tiny-label mt-1">Acesso administrativo</p></div><Button variant="ghost" size="icon" onClick={() => setPasswordOpen(true)} title="Redefinir minha senha"><LockKeyhole className="h-4 w-4" /></Button><Button variant="ghost" size="icon" onClick={logout} title="Sair da administração"><LogOut className="h-4 w-4" /></Button></div><ChangePasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} /></header>;
+}
+
+function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const utils = trpc.useUtils();
+  const change = trpc.admin.changeOwnPassword.useMutation({
+    onSuccess: async () => {
+      toast.success("Senha redefinida. Use a nova senha no próximo acesso.");
+      await utils.auth.me.invalidate();
+      setPassword("");
+      setConfirm("");
+      onClose();
+    },
+    onError: error => toast.error(error.message),
+  });
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (password !== confirm) {
+      toast.error("A confirmação não corresponde à nova senha.");
+      return;
+    }
+    change.mutate({ password });
+  };
+
+  return <Dialog open={open} onOpenChange={next => { if (!next) onClose(); }}><DialogContent className="rounded-none bg-[#f8f3e9] sm:max-w-md"><DialogHeader><p className="tiny-label">Segurança de acesso</p><DialogTitle className="font-serif text-3xl">Redefinir minha senha</DialogTitle></DialogHeader><form onSubmit={submit} className="space-y-4"><p className="text-sm leading-relaxed text-stone-600">Defina uma nova senha para sua conta administrativa. As sessões ativas serão encerradas — você precisará entrar novamente.</p><div className="space-y-2"><Label className="tiny-label">Nova senha</Label><Input value={password} onChange={event => setPassword(event.target.value)} type={showPassword ? "text" : "password"} minLength={8} required className="admin-input" /></div><div className="space-y-2"><Label className="tiny-label">Confirmar nova senha</Label><Input value={confirm} onChange={event => setConfirm(event.target.value)} type={showPassword ? "text" : "password"} minLength={8} required className="admin-input" /></div><Button type="button" variant="link" onClick={() => setShowPassword(value => !value)} className="h-auto p-0 text-xs font-semibold text-[#2e7d4e] underline-offset-4 hover:text-[#1d4a2f]">{showPassword ? "Ocultar senha" : "Mostrar senha"}</Button><Button type="submit" disabled={change.isPending} className="h-11 w-full rounded-none bg-stone-950 text-xs tracking-[0.15em]">{change.isPending ? <Loader2 className="animate-spin" /> : "Confirmar redefinição"}</Button></form></DialogContent></Dialog>;
 }
 
 function Overview() {

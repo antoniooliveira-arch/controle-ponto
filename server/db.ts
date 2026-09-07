@@ -337,6 +337,15 @@ export async function resetEmployeePassword(employeeId: number, password: string
   await db.update(employeeSessions).set({ revokedAt: new Date() }).where(eq(employeeSessions.employeeId, employeeId));
 }
 
+export async function changeOwnAdminPassword(adminId: number, password: string) {
+  const db = await requireDb();
+  await db
+    .update(users)
+    .set({ passwordHash: await hashPassword(password), passwordFailures: 0, lockedUntil: null, updatedAt: new Date() })
+    .where(eq(users.id, adminId));
+  await db.update(userSessions).set({ revokedAt: new Date() }).where(eq(userSessions.userId, adminId));
+}
+
 export async function getAdminDashboard(businessDate = getBusinessDate()) {
   const db = await requireDb();
   const employeeRows = await db

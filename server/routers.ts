@@ -3,6 +3,7 @@ import { z } from "zod";
 import { parse as parseCookieHeader } from "cookie";
 import { COOKIE_NAME } from "@shared/const";
 import {
+  changeOwnAdminPassword,
   createEmployee,
   createSector,
   getAdminDashboard,
@@ -140,6 +141,10 @@ export const appRouter = router({
       active: z.boolean(),
     })).mutation(({ input }) => updateEmployee(input.employeeId, input)),
     resetPassword: adminProcedure.input(z.object({ employeeId: z.number().int().positive(), password: passwordSchema })).mutation(({ input }) => resetEmployeePassword(input.employeeId, input.password)),
+    changeOwnPassword: adminProcedure.input(z.object({ password: passwordSchema })).mutation(async ({ ctx, input }) => {
+      await changeOwnAdminPassword(ctx.user.id, input.password);
+      return { success: true } as const;
+    }),
     report: adminProcedure.input(z.object({ startDate: dateSchema, endDate: dateSchema, employeeId: z.number().int().positive().optional() })).query(({ input }) => {
       if (input.startDate > input.endDate) throw new TRPCError({ code: "BAD_REQUEST", message: "O período informado é inválido." });
       return getAttendanceReport(input);

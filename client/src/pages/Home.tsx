@@ -118,7 +118,7 @@ function LoginScreen() {
             </form>
 
             <div className="mt-5 text-center">
-              <Button type="button" variant="link" onClick={() => toast.info("Para redefinir sua senha, procure o Departamento de Tecnologia da SME.")} className="h-auto p-0 text-xs font-semibold text-[#2e7d4e] underline-offset-4 hover:text-[#1d4a2f]">Esqueceu sua senha?</Button>
+              <Button type="button" variant="link" onClick={() => toast.info("Para redefinir sua senha, procure o administrador responsável pelo cadastro.")} className="h-auto p-0 text-xs font-semibold text-[#2e7d4e] underline-offset-4 hover:text-[#1d4a2f]">Esqueceu sua senha?</Button>
             </div>
 
             {employees.isError ? <div className="mt-6 border-t border-[#eef0ea] pt-4"><p className="text-sm leading-relaxed text-stone-600">Não foi possível carregar a lista de servidores.</p><Button type="button" variant="link" onClick={() => employees.refetch()} className="mt-1 h-auto p-0 text-xs font-semibold text-[#2e7d4e]">Tentar novamente</Button></div> : !employees.isLoading && !employees.data?.length ? <p className="mt-6 border-t border-[#eef0ea] pt-4 text-sm leading-relaxed text-stone-600">Ainda não há servidores ativos. Solicite ao administrador o seu cadastro.</p> : <p className="mt-6 border-t border-[#eef0ea] pt-4 text-xs leading-relaxed text-stone-500">Sua senha é processada de forma protegida. O sistema não armazena senhas em texto aberto.</p>}
