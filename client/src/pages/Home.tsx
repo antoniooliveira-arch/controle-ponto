@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PUNCH_LABELS, PUNCH_MARKS, PUNCH_SHORT_LABELS, formatDate, formatDuration, formatTime, recordTime, type PunchType } from "@/lib/attendance";
 import { trpc } from "@/lib/trpc";
-import { ArrowUpRight, CircleAlert, Clock3, DoorOpen, Loader2, LogOut, ShieldCheck } from "lucide-react";
+import { CircleAlert, Clock3, Eye, EyeOff, FileCheck2, Loader2, LogOut, Settings2, ShieldCheck, Timer } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -22,6 +22,13 @@ function LiveClock() {
   );
 }
 
+const LOGIN_FEATURES = [
+  { icon: ShieldCheck, title: "Controle de acesso", sub: "Mais segurança" },
+  { icon: FileCheck2, title: "Registros precisos", sub: "Informações organizadas" },
+  { icon: Eye, title: "Transparência", sub: "Para todos" },
+  { icon: Timer, title: "Jornada", sub: "Controle simplificado" },
+];
+
 function LoginScreen() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
@@ -35,6 +42,7 @@ function LoginScreen() {
   });
   const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -46,54 +54,78 @@ function LoginScreen() {
   };
 
   return (
-    <main className="editorial-shell min-h-screen px-5 py-5 sm:p-8 lg:p-12">
-      <div className="editorial-frame mx-auto flex min-h-[calc(100vh-2.5rem)] max-w-[1440px] flex-col sm:min-h-[calc(100vh-4rem)]">
-        <header className="flex items-center justify-between border-b border-stone-900/15 pb-5">
+    <main className="login-shell flex min-h-screen flex-col px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-6">
+      <div className="login-frame flex flex-1 flex-col">
+        <header className="flex items-center justify-between py-2">
           <div className="flex items-center gap-3">
-            <span className="grid h-8 w-8 place-items-center border border-stone-900 text-[10px] font-bold tracking-[0.18em]">CP</span>
-            <span className="tiny-label">Sistema de gestão de jornada</span>
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#1d4a2f] font-serif text-sm font-bold tracking-[0.14em] text-white">CP</span>
+            <div className="leading-tight">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#1d4a2f]">Sistema de gestão de jornada</p>
+              <p className="text-[11px] text-stone-500">Departamento de Tecnologia · SME</p>
+            </div>
           </div>
-          <Button variant="ghost" onClick={() => setLocation("/administracao")} className="text-xs tracking-[0.14em] hover:bg-stone-900 hover:text-stone-50">
-            Administração <ArrowUpRight className="ml-2 h-3.5 w-3.5" />
+          <Button variant="ghost" onClick={() => setLocation("/administracao")} className="h-9 rounded-lg px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#1d4a2f] hover:bg-[#e4ece6] hover:text-[#143a27]">
+            <Settings2 className="h-3.5 w-3.5" /> Administração
           </Button>
         </header>
 
-        <section className="grid flex-1 items-center gap-10 py-12 lg:grid-cols-[1.2fr_0.8fr] lg:gap-20">
-          <div className="relative max-w-3xl py-6 lg:py-14">
-            <p className="tiny-label mb-7">Ponto diário · 4 etapas obrigatórias</p>
-            <h1 className="editorial-title max-w-3xl text-5xl leading-[0.93] sm:text-7xl xl:text-8xl">O tempo que organiza o serviço público.</h1>
-            <p className="mt-8 max-w-md font-serif text-lg leading-relaxed text-stone-700">Registre sua jornada com clareza. Cada movimento é conferido no momento certo, com precisão e segurança.</p>
-            <div className="absolute -left-2 top-3 hidden h-12 w-12 border-l border-t border-stone-950/55 lg:block" />
+        <section className="grid flex-1 items-center gap-7 py-8 lg:grid-cols-[1.18fr_0.82fr] lg:gap-12">
+          <div className="overflow-hidden rounded-3xl border border-[#dfe6df] bg-[#edf2ec] p-7 sm:p-10 lg:p-12">
+            <div className="md:grid md:grid-cols-[minmax(0,1fr)_auto] md:gap-8">
+              <div>
+                <p className="login-label text-[#2e7d4e]">Ponto diário · 4 etapas obrigatórias</p>
+                <h1 className="mt-5 font-serif text-4xl font-bold leading-[1.04] tracking-tight text-[#163224] sm:text-5xl lg:text-[3.3rem]">O tempo que organiza o serviço público.</h1>
+                <p className="mt-6 max-w-md text-[15px] leading-relaxed text-stone-600">Registre sua jornada com clareza. Cada movimento é conferido no momento certo, com precisão e segurança.</p>
+              </div>
+              <img src="/images/ponto-eletronico.svg" alt="Terminal de registro de ponto eletrônico" className="hidden w-[260px] rounded-2xl bg-white/70 p-2 md:block lg:w-[300px] xl:w-[330px]" loading="eager" />
+            </div>
+            <div className="mt-9 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:mt-12 lg:gap-4">
+              {LOGIN_FEATURES.map(feature => (
+                <div key={feature.title} className="rounded-xl bg-white/80 p-4">
+                  <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#e4f0e8]"><feature.icon className="h-4 w-4 text-[#1d4a2f]" strokeWidth={1.8} /></span>
+                  <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.12em] text-[#2a4032]">{feature.title}</p>
+                  <p className="mt-1 text-xs text-stone-600">{feature.sub}</p>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <form onSubmit={submit} className="paper-card relative mx-auto w-full max-w-md p-7 sm:p-9">
-            <div className="mb-9 flex items-start justify-between border-b border-stone-900/15 pb-5">
-              <div>
-                <p className="tiny-label">Acesso do servidor</p>
-                <h2 className="mt-2 font-serif text-3xl font-semibold">Identificação</h2>
-              </div>
-              <ShieldCheck className="h-5 w-5 text-stone-600" strokeWidth={1.4} />
-            </div>
-            <div className="space-y-5">
+          <div className="mx-auto w-full max-w-md rounded-3xl border border-[#e5e7e0] bg-white p-7 shadow-[0_24px_48px_-28px_rgba(22,50,36,0.4)] sm:p-9">
+            <p className="login-label text-[#2e7d4e]">Acesso do servidor</p>
+            <h2 className="mt-3 font-serif text-4xl font-bold tracking-tight text-[#163224]">Identificação</h2>
+            <p className="mt-3 text-sm leading-relaxed text-stone-500">Faça login para registrar sua jornada de trabalho.</p>
+
+            <form onSubmit={submit} className="mt-8 space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="employee" className="tiny-label">Servidor</Label>
-                <select id="employee" value={employeeId} onChange={event => setEmployeeId(event.target.value)} disabled={employees.isLoading || login.isPending} className="editorial-input h-12 w-full px-3 text-sm">
+                <Label htmlFor="employee" className="login-label">Servidor</Label>
+                <select id="employee" value={employeeId} onChange={event => setEmployeeId(event.target.value)} disabled={employees.isLoading || login.isPending} className="login-input">
                   <option value="">{employees.isLoading ? "Carregando nomes…" : "Selecione seu nome"}</option>
                   {employees.data?.map(employee => <option value={String(employee.id)} key={employee.id}>{employee.fullName} · {employee.registration}</option>)}
                 </select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password" className="tiny-label">Senha</Label>
-                <Input id="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} className="editorial-input h-12 rounded-none px-3" placeholder="Sua senha de acesso" disabled={login.isPending} />
+                <Label htmlFor="password" className="login-label">Senha</Label>
+                <div className="relative">
+                  <Input id="password" type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} className="login-input pr-12" placeholder="Sua senha de acesso" disabled={login.isPending} />
+                  <Button type="button" variant="ghost" size="icon" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} className="absolute right-1 top-1 h-10 w-10 rounded-lg text-stone-400 hover:text-[#1d4a2f]">
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
-              <Button type="submit" disabled={login.isPending || employees.isLoading || !employees.data?.length} className="h-12 w-full rounded-none bg-stone-950 text-xs tracking-[0.16em] hover:bg-stone-800">
+              <Button type="submit" disabled={login.isPending || employees.isLoading || !employees.data?.length} className="login-btn">
                 {login.isPending ? <Loader2 className="animate-spin" /> : "Acessar jornada"}
               </Button>
+            </form>
+
+            <div className="mt-5 text-center">
+              <Button type="button" variant="link" onClick={() => toast.info("Para redefinir sua senha, procure o Departamento de Tecnologia da SME.")} className="h-auto p-0 text-xs font-semibold text-[#2e7d4e] underline-offset-4 hover:text-[#1d4a2f]">Esqueceu sua senha?</Button>
             </div>
-            {employees.isError ? <div className="mt-5 border-t border-stone-900/10 pt-4"><p className="text-sm leading-relaxed text-stone-600">Não foi possível carregar a lista de servidores.</p><Button type="button" variant="link" onClick={() => employees.refetch()} className="mt-2 h-auto p-0 text-xs tracking-[0.12em]">Tentar novamente</Button></div> : !employees.isLoading && !employees.data?.length ? <p className="mt-5 border-t border-stone-900/10 pt-4 text-sm leading-relaxed text-stone-600">Ainda não há servidores ativos. Solicite ao administrador o seu cadastro.</p> : <p className="mt-5 border-t border-stone-900/10 pt-4 text-xs leading-relaxed text-stone-500">Sua senha é processada de forma protegida. O sistema não armazena senhas em texto aberto.</p>}
-          </form>
+
+            {employees.isError ? <div className="mt-6 border-t border-[#eef0ea] pt-4"><p className="text-sm leading-relaxed text-stone-600">Não foi possível carregar a lista de servidores.</p><Button type="button" variant="link" onClick={() => employees.refetch()} className="mt-1 h-auto p-0 text-xs font-semibold text-[#2e7d4e]">Tentar novamente</Button></div> : !employees.isLoading && !employees.data?.length ? <p className="mt-6 border-t border-[#eef0ea] pt-4 text-sm leading-relaxed text-stone-600">Ainda não há servidores ativos. Solicite ao administrador o seu cadastro.</p> : <p className="mt-6 border-t border-[#eef0ea] pt-4 text-xs leading-relaxed text-stone-500">Sua senha é processada de forma protegida. O sistema não armazena senhas em texto aberto.</p>}
+          </div>
         </section>
-        <footer className="flex justify-center border-t border-stone-900/15 py-5">
+
+        <footer className="flex justify-center border-t border-[#e5e7e0] py-5">
           <span className="font-bold text-stone-900" style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 11 }}>Desenvolvido Pelo Departamento de Tecnologia da SME.</span>
         </footer>
       </div>
