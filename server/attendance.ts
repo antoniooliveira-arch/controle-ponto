@@ -20,7 +20,7 @@ export type AttendanceSummary = {
   status: "SEM_ENTRADA" | "TRABALHANDO" | "EM_INTERVALO" | "COMPLETA";
 };
 
-export const BUSINESS_TIMEZONE = "America/Sao_Paulo";
+export const BUSINESS_TIMEZONE = "America/Cuiaba";
 
 export function getBusinessDate(date = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-CA", {

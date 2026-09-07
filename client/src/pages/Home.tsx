@@ -17,7 +17,7 @@ function LiveClock() {
   return (
     <div className="flex items-baseline gap-3">
       <span className="editorial-clock">{formatTime(now)}</span>
-      <span className="tiny-label">Horário de Brasília</span>
+      <span className="tiny-label">Horário de Cuiabá</span>
     </div>
   );
 }

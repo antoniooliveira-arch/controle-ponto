@@ -177,7 +177,7 @@ var PUNCH_SEQUENCE = [
   "RETORNO_INTERVALO",
   "SAIDA_FINAL"
 ];
-var BUSINESS_TIMEZONE = "America/Sao_Paulo";
+var BUSINESS_TIMEZONE = "America/Cuiaba";
 function getBusinessDate(date = /* @__PURE__ */ new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: BUSINESS_TIMEZONE,

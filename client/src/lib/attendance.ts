@@ -31,7 +31,7 @@ export function formatDuration(totalSeconds: number): string {
 export function formatTime(value: Date | string | null | undefined): string {
   if (!value) return "—";
   return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
+    timeZone: "America/Cuiaba",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -40,7 +40,7 @@ export function formatTime(value: Date | string | null | undefined): string {
 
 export function formatDate(value: Date | string): string {
   return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
+    timeZone: "America/Cuiaba",
     weekday: "long",
     day: "2-digit",
     month: "long",
@@ -50,7 +50,7 @@ export function formatDate(value: Date | string): string {
 
 export function businessDateNow(): string {
   const pieces = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
+    timeZone: "America/Cuiaba",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
