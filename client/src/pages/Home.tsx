@@ -94,7 +94,7 @@ function LoginScreen() {
           </form>
         </section>
         <footer className="flex flex-col justify-between gap-3 border-t border-stone-900/15 py-5 text-[10px] uppercase tracking-[0.16em] text-stone-500 sm:flex-row">
-          <span>Controle de ponto · operação diária</span><span>Registro protegido e sequencial</span>
+          <span>Controle de ponto · operação diária</span><span className="flex flex-wrap items-center gap-3"><span className="order-last font-bold text-stone-900" style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 11 }}>Desenvolvido Pelo Departamento de Tecnologia da SME.</span><span className="hidden sm:inline">Registro protegido e sequencial</span></span>
         </footer>
       </div>
     </main>
