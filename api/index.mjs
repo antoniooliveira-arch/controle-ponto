@@ -740,7 +740,7 @@ var appRouter = router({
   }),
   employee: router({
     listForLogin: publicProcedure.query(() => listActiveEmployeesForLogin()),
-    login: publicProcedure.input(z2.object({ employeeId: z2.number().int().positive(), password: passwordSchema })).mutation(async ({ ctx, input }) => {
+    login: publicProcedure.input(z2.object({ employeeId: z2.number().int().positive(), password: employeePasswordSchema })).mutation(async ({ ctx, input }) => {
       const login = await loginEmployee(input.employeeId, input.password);
       if (!login) throw new TRPCError3({ code: "UNAUTHORIZED", message: "N\xE3o foi poss\xEDvel validar as credenciais informadas." });
       ctx.res.cookie(EMPLOYEE_COOKIE, login.token, employeeCookieOptions(ctx.req));

@@ -103,7 +103,7 @@ export const appRouter = router({
   }),
   employee: router({
     listForLogin: publicProcedure.query(() => listActiveEmployeesForLogin()),
-    login: publicProcedure.input(z.object({ employeeId: z.number().int().positive(), password: passwordSchema })).mutation(async ({ ctx, input }) => {
+    login: publicProcedure.input(z.object({ employeeId: z.number().int().positive(), password: employeePasswordSchema })).mutation(async ({ ctx, input }) => {
       const login = await loginEmployee(input.employeeId, input.password);
       if (!login) throw new TRPCError({ code: "UNAUTHORIZED", message: "Não foi possível validar as credenciais informadas." });
       ctx.res.cookie(EMPLOYEE_COOKIE, login.token, employeeCookieOptions(ctx.req));
