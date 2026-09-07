@@ -28,6 +28,11 @@ import { adminProcedure, publicProcedure, router } from "./_core/trpc";
 
 const EMPLOYEE_COOKIE = "ponto_employee_session";
 const passwordSchema = z.string().min(8, "A senha deve conter ao menos 8 caracteres.").max(128);
+const employeePasswordSchema = z
+  .string()
+  .min(4, "A senha deve conter ao menos 4 caracteres.")
+  .max(128, "A senha deve conter no máximo 128 caracteres.")
+  .refine(value => value.length >= 8 || /^\d+$/.test(value), "Use ao menos 8 caracteres, ou uma sequência de números com no mínimo 4.");
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida.");
 
 function toClientUser(user: {
@@ -131,7 +136,7 @@ export const appRouter = router({
       fullName: z.string().trim().min(3).max(180),
       registration: z.string().trim().min(2).max(64),
       sectorId: z.number().int().positive().nullable().optional(),
-      password: passwordSchema,
+      password: employeePasswordSchema,
     })).mutation(({ input }) => createEmployee(input)),
     updateEmployee: adminProcedure.input(z.object({
       employeeId: z.number().int().positive(),
@@ -140,7 +145,7 @@ export const appRouter = router({
       sectorId: z.number().int().positive().nullable().optional(),
       active: z.boolean(),
     })).mutation(({ input }) => updateEmployee(input.employeeId, input)),
-    resetPassword: adminProcedure.input(z.object({ employeeId: z.number().int().positive(), password: passwordSchema })).mutation(({ input }) => resetEmployeePassword(input.employeeId, input.password)),
+    resetPassword: adminProcedure.input(z.object({ employeeId: z.number().int().positive(), password: employeePasswordSchema })).mutation(({ input }) => resetEmployeePassword(input.employeeId, input.password)),
     changeOwnPassword: adminProcedure.input(z.object({ password: passwordSchema })).mutation(async ({ ctx, input }) => {
       await changeOwnAdminPassword(ctx.user.id, input.password);
       return { success: true } as const;

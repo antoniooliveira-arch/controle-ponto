@@ -683,6 +683,7 @@ var systemRouter = router({
 // server/routers.ts
 var EMPLOYEE_COOKIE = "ponto_employee_session";
 var passwordSchema = z2.string().min(8, "A senha deve conter ao menos 8 caracteres.").max(128);
+var employeePasswordSchema = z2.string().min(4, "A senha deve conter ao menos 4 caracteres.").max(128, "A senha deve conter no m\xE1ximo 128 caracteres.").refine((value) => value.length >= 8 || /^\d+$/.test(value), "Use ao menos 8 caracteres, ou uma sequ\xEAncia de n\xFAmeros com no m\xEDnimo 4.");
 var dateSchema = z2.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data v\xE1lida.");
 function toClientUser(user) {
   return {
@@ -772,7 +773,7 @@ var appRouter = router({
       fullName: z2.string().trim().min(3).max(180),
       registration: z2.string().trim().min(2).max(64),
       sectorId: z2.number().int().positive().nullable().optional(),
-      password: passwordSchema
+      password: employeePasswordSchema
     })).mutation(({ input }) => createEmployee(input)),
     updateEmployee: adminProcedure.input(z2.object({
       employeeId: z2.number().int().positive(),
@@ -781,7 +782,7 @@ var appRouter = router({
       sectorId: z2.number().int().positive().nullable().optional(),
       active: z2.boolean()
     })).mutation(({ input }) => updateEmployee(input.employeeId, input)),
-    resetPassword: adminProcedure.input(z2.object({ employeeId: z2.number().int().positive(), password: passwordSchema })).mutation(({ input }) => resetEmployeePassword(input.employeeId, input.password)),
+    resetPassword: adminProcedure.input(z2.object({ employeeId: z2.number().int().positive(), password: employeePasswordSchema })).mutation(({ input }) => resetEmployeePassword(input.employeeId, input.password)),
     changeOwnPassword: adminProcedure.input(z2.object({ password: passwordSchema })).mutation(async ({ ctx, input }) => {
       await changeOwnAdminPassword(ctx.user.id, input.password);
       return { success: true };
