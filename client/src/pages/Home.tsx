@@ -130,6 +130,10 @@ function LoginScreen() {
                   <span className="mt-1 block text-xs leading-relaxed text-stone-500">Escaneie o QR Code ou toque para copiar o link e abrir o aplicativo rapidamente.</span>
                 </span>
               </button>
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-[#e5e7e0] px-3 py-2">
+                <span className="min-w-0"><span className="block text-[11px] font-bold uppercase tracking-[0.13em] text-[#2e7d4e]">Link curto</span><a href="https://spoo.me/RalbeqE" target="_blank" rel="noreferrer" className="block truncate text-sm text-[#1d4a2f] hover:underline">spoo.me/RalbeqE</a></span>
+                <Button type="button" variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText("https://spoo.me/RalbeqE"); toast.success("Link curto copiado."); }} className="shrink-0 text-xs font-semibold text-[#2e7d4e]">Copiar</Button>
+              </div>
             </div>
 
             {employees.isError ? <div className="mt-6 border-t border-[#eef0ea] pt-4"><p className="text-sm leading-relaxed text-stone-600">Não foi possível carregar a lista de servidores.</p><Button type="button" variant="link" onClick={() => employees.refetch()} className="mt-1 h-auto p-0 text-xs font-semibold text-[#2e7d4e]">Tentar novamente</Button></div> : !employees.isLoading && !employees.data?.length ? <p className="mt-6 border-t border-[#eef0ea] pt-4 text-sm leading-relaxed text-stone-600">Ainda não há servidores ativos. Solicite ao administrador o seu cadastro.</p> : <p className="mt-6 border-t border-[#eef0ea] pt-4 text-xs leading-relaxed text-stone-500">Sua senha é processada de forma protegida. O sistema não armazena senhas em texto aberto.</p>}
