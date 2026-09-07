@@ -1,0 +1,48 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px); --radius-md: calc(var(--radius) - 2px); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground); --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground); --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground); --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground); --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground); --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-destructive: var(--destructive); --color-destructive-foreground: var(--destructive-foreground); --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
+}
+
+:root { --radius: 0rem; --background: oklch(0.956 0.016 78); --foreground: oklch(0.22 0.016 65); --card: oklch(0.977 0.01 82); --card-foreground: oklch(0.22 0.016 65); --popover: oklch(0.977 0.01 82); --popover-foreground: oklch(0.22 0.016 65); --primary: oklch(0.21 0.014 65); --primary-foreground: oklch(0.98 0.007 80); --secondary: oklch(0.92 0.016 79); --secondary-foreground: oklch(0.27 0.015 65); --muted: oklch(0.93 0.012 78); --muted-foreground: oklch(0.47 0.018 65); --accent: oklch(0.91 0.024 78); --accent-foreground: oklch(0.22 0.016 65); --destructive: oklch(0.52 0.17 28); --destructive-foreground: oklch(0.98 0 0); --border: oklch(0.76 0.023 76); --input: oklch(0.76 0.023 76); --ring: oklch(0.31 0.016 65); }
+
+@layer base { * { @apply border-border outline-ring/50; } body { @apply bg-background text-foreground; font-family: "Manrope", sans-serif; } button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [type="button"]:not(:disabled), [type="submit"]:not(:disabled), [type="reset"]:not(:disabled), a[href], select:not(:disabled), input[type="checkbox"]:not(:disabled), input[type="radio"]:not(:disabled) { @apply cursor-pointer; } }
+
+@layer components {
+  .editorial-shell { background-color: #f5f0e7; background-image: linear-gradient(rgba(42, 36, 28, .045) 1px, transparent 1px), linear-gradient(90deg, rgba(42, 36, 28, .045) 1px, transparent 1px); background-size: 72px 72px; }
+  .editorial-frame { border-left: 1px solid rgba(42, 36, 28, .14); border-right: 1px solid rgba(42, 36, 28, .14); }
+  .editorial-title { font-family: "Bodoni Moda", Didot, Georgia, serif; font-weight: 700; letter-spacing: -.055em; }
+  .editorial-clock { font-family: "Bodoni Moda", Didot, Georgia, serif; font-size: 1.65rem; letter-spacing: -.06em; line-height: 1; }
+  .tiny-label { font-family: "DM Mono", monospace; font-size: .64rem; font-weight: 500; letter-spacing: .16em; line-height: 1.3; text-transform: uppercase; }
+  .paper-card { background: rgba(255, 252, 245, .68); border: 1px solid rgba(42, 36, 28, .22); box-shadow: 10px 11px 0 rgba(42, 36, 28, .08); }
+  .editorial-input, .admin-input, .admin-select { border-color: rgba(42, 36, 28, .24) !important; background: rgba(255, 255, 255, .35) !important; box-shadow: none !important; }
+  .editorial-input:focus, .admin-input:focus, .admin-select:focus { border-color: rgba(42, 36, 28, .8) !important; }
+  .admin-shell { background: #f5f0e7; color: #29241c; }
+  .admin-header { display: flex; min-height: 84px; flex-wrap: wrap; align-items: center; gap: 1rem; border-bottom: 1px solid rgba(42,36,28,.15); background: rgba(248,243,233,.9); padding: 1rem clamp(1.25rem, 4vw, 4rem); backdrop-filter: blur(14px); }
+  .admin-nav-item { display: inline-flex; align-items: center; gap: .5rem; padding: .6rem .75rem; font-family: "DM Mono", monospace; font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; color: #786f65; transition: all .18s; }
+  .admin-nav-item:hover, .admin-nav-item-active { background: #29241c; color: #fffaf0; }
+  .admin-page { width: min(1240px, calc(100% - 2.5rem)); margin: 0 auto; padding: clamp(2.5rem, 6vw, 5.5rem) 0; }
+  .admin-title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 2rem; }
+  .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: rgba(42,36,28,.17); }
+  .metric-card { min-height: 132px; display: flex; flex-direction: column; justify-content: space-between; padding: 1.25rem; background: #f8f3e9; }
+  .metric-card strong { font-family: "Bodoni Moda", Didot, Georgia, serif; font-size: 3rem; line-height: .95; letter-spacing: -.06em; }
+  .admin-table-card { border: 1px solid rgba(42,36,28,.18); background: rgba(255,252,245,.5); }
+  .admin-table-card table { width: 100%; min-width: 730px; border-collapse: collapse; }
+  .admin-table-card th { padding: .9rem 1rem; border-bottom: 1px solid rgba(42,36,28,.16); font-family: "DM Mono", monospace; font-size: .6rem; font-weight: 500; letter-spacing: .13em; text-align: left; text-transform: uppercase; color: #746b61; }
+  .admin-table-card td { padding: 1rem; border-bottom: 1px solid rgba(42,36,28,.1); font-size: .82rem; }
+  .admin-table-card tbody tr:last-child td { border-bottom: 0; }
+  .admin-table-card small { display: block; margin-top: .25rem; font-size: .67rem; color: #786f65; }
+  .status-pill { display: inline-flex; white-space: nowrap; padding: .32rem .5rem; font-family: "DM Mono", monospace; font-size: .58rem; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; }
+  .employee-row { display: flex; align-items: center; gap: 1rem; border: 1px solid rgba(42,36,28,.16); background: rgba(255,252,245,.48); padding: 1rem; }
+  .report-filter { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; border: 1px solid rgba(42,36,28,.16); background: rgba(255,252,245,.48); padding: 1.2rem; }
+  .toggle-control { display: flex; height: 24px; width: 43px; align-items: center; border: 1px solid rgba(42,36,28,.35); padding: 2px; transition: all .18s; }
+  .toggle-control span { display: block; height: 17px; width: 17px; background: #746b61; transition: transform .18s; }
+  .toggle-control-on { border-color: #29241c; background: #29241c; }
+  .toggle-control-on span { transform: translateX(18px); background: #fffaf0; }
+  @media (min-width: 768px) { .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 1023px) { .admin-header { align-items: center; } }
+}
