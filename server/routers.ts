@@ -29,6 +29,22 @@ const EMPLOYEE_COOKIE = "ponto_employee_session";
 const passwordSchema = z.string().min(8, "A senha deve conter ao menos 8 caracteres.").max(128);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida.");
 
+function toClientUser(user: {
+  id: number;
+  openId: string;
+  name: string | null;
+  email: string | null;
+  role: string;
+}) {
+  return {
+    id: user.id,
+    openId: user.openId,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+  };
+}
+
 function getCookieValue(cookieHeader: string | undefined, name: string): string | null {
   const prefix = `${name}=`;
   const found = cookieHeader?.split(";").map(item => item.trim()).find(item => item.startsWith(prefix));
@@ -64,7 +80,7 @@ async function requireEmployee(cookieHeader: string | undefined) {
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => (opts.ctx.user ? toClientUser(opts.ctx.user) : null)),
     login: publicProcedure.input(z.object({ login: z.string().trim().min(2).max(180), password: passwordSchema })).mutation(async ({ ctx, input }) => {
       const admin = await loginAdmin(input.login, input.password);
       if (!admin) throw new TRPCError({ code: "UNAUTHORIZED", message: "Não foi possível validar as credenciais administrativas." });

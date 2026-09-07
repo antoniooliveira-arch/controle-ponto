@@ -679,6 +679,15 @@ var systemRouter = router({
 var EMPLOYEE_COOKIE = "ponto_employee_session";
 var passwordSchema = z2.string().min(8, "A senha deve conter ao menos 8 caracteres.").max(128);
 var dateSchema = z2.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data v\xE1lida.");
+function toClientUser(user) {
+  return {
+    id: user.id,
+    openId: user.openId,
+    name: user.name,
+    email: user.email,
+    role: user.role
+  };
+}
 function getCookieValue(cookieHeader, name) {
   const prefix = `${name}=`;
   const found = cookieHeader?.split(";").map((item) => item.trim()).find((item) => item.startsWith(prefix));
@@ -708,7 +717,7 @@ async function requireEmployee(cookieHeader) {
 var appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query((opts) => opts.ctx.user),
+    me: publicProcedure.query((opts) => opts.ctx.user ? toClientUser(opts.ctx.user) : null),
     login: publicProcedure.input(z2.object({ login: z2.string().trim().min(2).max(180), password: passwordSchema })).mutation(async ({ ctx, input }) => {
       const admin = await loginAdmin(input.login, input.password);
       if (!admin) throw new TRPCError3({ code: "UNAUTHORIZED", message: "N\xE3o foi poss\xEDvel validar as credenciais administrativas." });
