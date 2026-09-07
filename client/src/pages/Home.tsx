@@ -93,8 +93,8 @@ function LoginScreen() {
             {employees.isError ? <div className="mt-5 border-t border-stone-900/10 pt-4"><p className="text-sm leading-relaxed text-stone-600">Não foi possível carregar a lista de servidores.</p><Button type="button" variant="link" onClick={() => employees.refetch()} className="mt-2 h-auto p-0 text-xs tracking-[0.12em]">Tentar novamente</Button></div> : !employees.isLoading && !employees.data?.length ? <p className="mt-5 border-t border-stone-900/10 pt-4 text-sm leading-relaxed text-stone-600">Ainda não há servidores ativos. Solicite ao administrador o seu cadastro.</p> : <p className="mt-5 border-t border-stone-900/10 pt-4 text-xs leading-relaxed text-stone-500">Sua senha é processada de forma protegida. O sistema não armazena senhas em texto aberto.</p>}
           </form>
         </section>
-        <footer className="flex flex-col justify-between gap-3 border-t border-stone-900/15 py-5 text-[10px] uppercase tracking-[0.16em] text-stone-500 sm:flex-row">
-          <span>Controle de ponto · operação diária</span><span className="flex flex-wrap items-center gap-3"><span className="order-last font-bold text-stone-900" style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 11 }}>Desenvolvido Pelo Departamento de Tecnologia da SME.</span><span className="hidden sm:inline">Registro protegido e sequencial</span></span>
+        <footer className="flex justify-center border-t border-stone-900/15 py-5">
+          <span className="font-bold text-stone-900" style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 11 }}>Desenvolvido Pelo Departamento de Tecnologia da SME.</span>
         </footer>
       </div>
     </main>
