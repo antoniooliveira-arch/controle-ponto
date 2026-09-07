@@ -14,17 +14,27 @@ import {
 const roleEnum = pgEnum("role", ["user", "admin"]);
 const statusEnum = pgEnum("status", ["OPEN", "COMPLETE"]);
 
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
-  name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: roleEnum("role").default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: serial("id").primaryKey(),
+    openId: varchar("openId", { length: 64 }).notNull().unique(),
+    name: text("name"),
+    email: varchar("email", { length: 320 }),
+    loginMethod: varchar("loginMethod", { length: 64 }),
+    role: roleEnum("role").default("user").notNull(),
+    passwordHash: varchar("passwordHash", { length: 255 }),
+    passwordFailures: integer("passwordFailures").default(0).notNull(),
+    lockedUntil: timestamp("lockedUntil"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+    lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  },
+  table => [
+    index("users_email_idx").on(table.email),
+    index("users_name_idx").on(table.name),
+  ],
+);
 
 export const sectors = pgTable(
   "sectors",
@@ -72,6 +82,22 @@ export const employeeSessions = pgTable(
   table => [
     uniqueIndex("employee_sessions_token_unique").on(table.tokenHash),
     index("employee_sessions_employee_idx").on(table.employeeId),
+  ],
+);
+
+export const userSessions = pgTable(
+  "user_sessions",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("user_sessions_token_unique").on(table.tokenHash),
+    index("user_sessions_user_idx").on(table.userId),
   ],
 );
 

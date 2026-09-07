@@ -1,6 +1,9 @@
+import { parse as parseCookieHeader } from "cookie";
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
+import { getUserSession } from "../db";
 import { sdk } from "./sdk";
+import { ADMIN_SESSION_COOKIE } from "./cookies";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -18,6 +21,13 @@ export async function createContext(
   } catch (error) {
     // Authentication is optional for public procedures.
     user = null;
+  }
+
+  if (!user) {
+    const adminToken = parseCookieHeader(opts.req.headers.cookie ?? "")[ADMIN_SESSION_COOKIE];
+    if (adminToken) {
+      user = await getUserSession(adminToken);
+    }
   }
 
   return {

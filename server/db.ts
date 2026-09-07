@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, gt, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import {
@@ -7,6 +7,7 @@ import {
   InsertUser,
   sectors,
   timeRecords,
+  userSessions,
   users,
   workdays,
 } from "../drizzle/schema";
@@ -61,6 +62,73 @@ export async function getUserByOpenId(openId: string) {
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result[0];
+}
+
+function getUserByLogin(db: ReturnType<typeof drizzle>, login: string) {
+  const term = login.trim().toLowerCase();
+  if (!term) return null;
+  return db
+    .select()
+    .from(users)
+    .where(or(eq(users.email, term), sql`lower(${users.name}) = ${term}`))
+    .limit(1)
+    .then(rows => rows[0] ?? null);
+}
+
+export async function loginAdmin(login: string, password: string) {
+  const db = await requireDb();
+  const userRow = await getUserByLogin(db, login);
+  const now = new Date();
+  if (!userRow || userRow.role !== "admin" || !userRow.passwordHash || (userRow.lockedUntil && userRow.lockedUntil > now)) {
+    return null;
+  }
+
+  const matches = await verifyPassword(password, userRow.passwordHash);
+  if (!matches) {
+    await db.update(users).set(nextFailedLoginState(userRow.passwordFailures, now)).where(eq(users.id, userRow.id));
+    return null;
+  }
+
+  await db.update(users).set({ passwordFailures: 0, lockedUntil: null, lastSignedIn: now, updatedAt: now }).where(eq(users.id, userRow.id));
+  const token = generateSessionToken();
+  await db.insert(userSessions).values({
+    userId: userRow.id,
+    tokenHash: hashSessionToken(token),
+    expiresAt: new Date(now.getTime() + SESSION_LIFETIME_MS),
+  });
+  return {
+    token,
+    user: { ...userRow, passwordFailures: 0, lockedUntil: null, lastSignedIn: now },
+  };
+}
+
+export async function getUserSession(token: string | null) {
+  if (!token) return null;
+  const db = await requireDb();
+  const row = (
+    await db
+      .select({ user: users })
+      .from(userSessions)
+      .innerJoin(users, eq(userSessions.userId, users.id))
+      .where(
+        and(
+          eq(userSessions.tokenHash, hashSessionToken(token)),
+          isNull(userSessions.revokedAt),
+          gt(userSessions.expiresAt, new Date()),
+        ),
+      )
+      .limit(1)
+  )[0];
+  return row?.user ?? null;
+}
+
+export async function revokeUserSession(token: string | null) {
+  if (!token) return;
+  const db = await requireDb();
+  await db
+    .update(userSessions)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(userSessions.tokenHash, hashSessionToken(token)), isNull(userSessions.revokedAt)));
 }
 
 function toEmployeeView(employee: typeof employees.$inferSelect, sectorName: string | null = null) {

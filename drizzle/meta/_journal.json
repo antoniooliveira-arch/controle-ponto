@@ -8,6 +8,13 @@
       "when": 1788790692422,
       "tag": "0000_lovely_wind_dancer",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788799471893,
+      "tag": "0001_public_chronomancer",
+      "breakpoints": true
     }
   ]
 }

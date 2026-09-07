@@ -5,8 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { businessDateNow, formatDate, formatDuration, formatTime, recordTime } from "@/lib/attendance";
 import { trpc } from "@/lib/trpc";
-import { startLogin } from "@/const";
-import { ArrowLeft, BarChart3, Check, CircleAlert, Clock3, FileBarChart, Loader2, LockKeyhole, LogOut, Plus, RefreshCw, Settings2, UserCog, Users, X } from "lucide-react";
+import { ArrowLeft, BarChart3, Check, CircleAlert, Clock3, Eye, EyeOff, FileBarChart, Loader2, LockKeyhole, LogOut, Plus, RefreshCw, Settings2, ShieldCheck, UserCog, Users, X } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -115,7 +114,70 @@ function Workspace() {
 export default function Admin() {
   const { loading, user } = useAuth(); const [, setLocation] = useLocation();
   if (loading) return <main className="editorial-shell grid min-h-screen place-items-center"><Loader2 className="h-6 w-6 animate-spin" /></main>;
-  if (!user) return <main className="editorial-shell grid min-h-screen place-items-center p-5"><section className="paper-card max-w-md p-8 text-center"><span className="mx-auto grid h-10 w-10 place-items-center border border-stone-900"><Settings2 className="h-4 w-4" /></span><p className="tiny-label mt-6">Área restrita</p><h1 className="mt-3 font-serif text-4xl font-semibold">Administração</h1><p className="mt-4 leading-relaxed text-stone-600">Acesse com a sua conta administrativa para gerenciar servidores e jornadas.</p><Button onClick={() => startLogin()} className="mt-7 h-11 w-full rounded-none bg-stone-950 text-xs tracking-[0.15em]">Entrar como administrador</Button><Button variant="ghost" onClick={() => setLocation("/")} className="mt-3 w-full text-xs tracking-[0.12em]">Voltar ao ponto</Button></section></main>;
-  if (user.role !== "admin") return <main className="editorial-shell grid min-h-screen place-items-center p-5"><section className="paper-card max-w-md p-8 text-center"><CircleAlert className="mx-auto h-6 w-6 text-amber-700" /><h1 className="mt-5 font-serif text-3xl">Acesso não autorizado</h1><p className="mt-3 text-stone-600">A sua conta não possui permissão administrativa.</p><Button variant="outline" onClick={() => setLocation("/")} className="mt-6 rounded-none border-stone-900/25">Voltar</Button></section></main>;
+  if (!user) return <AdminLogin />;
+  if (user.role !== "admin") return <main className="admin-shell"><header className="admin-header justify-between"><Button variant="ghost" onClick={() => setLocation("/")} className="text-xs tracking-[0.14em]">Voltar ao ponto</Button></header><section className="admin-page"><div className="paper-card max-w-md p-8 text-center"><CircleAlert className="mx-auto h-6 w-6 text-amber-700" /><h1 className="mt-5 font-serif text-3xl">Acesso não autorizado</h1><p className="mt-3 text-stone-600">A sua conta não possui permissão administrativa.</p><Button variant="outline" onClick={() => setLocation("/")} className="mt-6 rounded-none border-stone-900/25">Voltar</Button></div></section></main>;
   return <Workspace />;
+}
+
+function AdminLogin() {
+  const utils = trpc.useUtils();
+  const [, setLocation] = useLocation();
+  const [loginValue, setLoginValue] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const login = trpc.auth.login.useMutation({
+    onSuccess: async () => {
+      await utils.auth.me.invalidate();
+      toast.success("Acesso administrativo confirmado.");
+    },
+    onError: error => toast.error(error.message),
+  });
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!loginValue || !password) {
+      toast.error("Informe o usuário e a senha.");
+      return;
+    }
+    login.mutate({ login: loginValue, password });
+  };
+
+  return (
+    <main className="login-shell flex min-h-screen flex-col px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-6">
+      <div className="login-frame flex flex-1 flex-col">
+        <header className="flex items-center justify-between py-2">
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#1d4a2f] font-serif text-sm font-bold tracking-[0.14em] text-white">CP</span>
+            <div className="leading-tight">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#1d4a2f]">Sistema de gestão de jornada</p>
+              <p className="text-[11px] text-stone-500">Departamento de Tecnologia · SME</p>
+            </div>
+          </div>
+          <Button variant="ghost" onClick={() => setLocation("/")} className="h-9 rounded-lg px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#1d4a2f] hover:bg-[#e4ece6] hover:text-[#143a27]">Voltar ao ponto</Button>
+        </header>
+        <section className="grid flex-1 place-items-center py-10">
+          <div className="w-full max-w-md rounded-3xl border border-[#e5e7e0] bg-white p-7 shadow-[0_24px_48px_-28px_rgba(22,50,36,0.4)] sm:p-9">
+            <span className="grid h-10 w-10 place-items-center rounded-lg bg-[#e4f0e8]"><ShieldCheck className="h-5 w-5 text-[#1d4a2f]" strokeWidth={1.8} /></span>
+            <h2 className="mt-6 font-serif text-4xl font-bold tracking-tight text-[#163224]">Administração</h2>
+            <p className="mt-3 text-sm leading-relaxed text-stone-500">Acesse com a sua conta administrativa para gerenciar servidores e jornadas.</p>
+            <form onSubmit={submit} className="mt-8 space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="admin-login" className="login-label">Usuário (e-mail ou nome)</Label>
+                <Input id="admin-login" value={loginValue} onChange={event => setLoginValue(event.target.value)} autoComplete="username" className="login-input" placeholder="Informe seu usuário" disabled={login.isPending} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="admin-password" className="login-label">Senha</Label>
+                <div className="relative">
+                  <Input id="admin-password" type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} className="login-input pr-12" placeholder="Sua senha de acesso" disabled={login.isPending} />
+                  <Button type="button" variant="ghost" size="icon" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} className="absolute right-1 top-1 h-10 w-10 rounded-lg text-stone-400 hover:text-[#1d4a2f]">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button>
+                </div>
+              </div>
+              <Button type="submit" disabled={login.isPending} className="login-btn">{login.isPending ? <Loader2 className="animate-spin" /> : "Entrar na administração"}</Button>
+            </form>
+            <p className="mt-6 border-t border-[#eef0ea] pt-4 text-xs leading-relaxed text-stone-500">Acesso restrito ao Departamento de Tecnologia da SME. As credenciais são guardadas de forma protegida.</p>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
 }

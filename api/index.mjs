@@ -29,7 +29,7 @@ var decodeOAuthState = (state) => {
 };
 
 // server/db.ts
-import { and, asc, desc, eq, gte, gt, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
@@ -48,17 +48,27 @@ import {
 } from "drizzle-orm/pg-core";
 var roleEnum = pgEnum("role", ["user", "admin"]);
 var statusEnum = pgEnum("status", ["OPEN", "COMPLETE"]);
-var users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
-  name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: roleEnum("role").default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
-});
+var users = pgTable(
+  "users",
+  {
+    id: serial("id").primaryKey(),
+    openId: varchar("openId", { length: 64 }).notNull().unique(),
+    name: text("name"),
+    email: varchar("email", { length: 320 }),
+    loginMethod: varchar("loginMethod", { length: 64 }),
+    role: roleEnum("role").default("user").notNull(),
+    passwordHash: varchar("passwordHash", { length: 255 }),
+    passwordFailures: integer("passwordFailures").default(0).notNull(),
+    lockedUntil: timestamp("lockedUntil"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+    lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
+  },
+  (table) => [
+    index("users_email_idx").on(table.email),
+    index("users_name_idx").on(table.name)
+  ]
+);
 var sectors = pgTable(
   "sectors",
   {
@@ -103,6 +113,21 @@ var employeeSessions = pgTable(
   (table) => [
     uniqueIndex("employee_sessions_token_unique").on(table.tokenHash),
     index("employee_sessions_employee_idx").on(table.employeeId)
+  ]
+);
+var userSessions = pgTable(
+  "user_sessions",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull()
+  },
+  (table) => [
+    uniqueIndex("user_sessions_token_unique").on(table.tokenHash),
+    index("user_sessions_user_idx").on(table.userId)
   ]
 );
 var workdays = pgTable(
@@ -270,6 +295,52 @@ async function getUserByOpenId(openId) {
   if (!db) return void 0;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result[0];
+}
+function getUserByLogin(db, login) {
+  const term = login.trim().toLowerCase();
+  if (!term) return null;
+  return db.select().from(users).where(or(eq(users.email, term), sql`lower(${users.name}) = ${term}`)).limit(1).then((rows) => rows[0] ?? null);
+}
+async function loginAdmin(login, password) {
+  const db = await requireDb();
+  const userRow = await getUserByLogin(db, login);
+  const now = /* @__PURE__ */ new Date();
+  if (!userRow || userRow.role !== "admin" || !userRow.passwordHash || userRow.lockedUntil && userRow.lockedUntil > now) {
+    return null;
+  }
+  const matches = await verifyPassword(password, userRow.passwordHash);
+  if (!matches) {
+    await db.update(users).set(nextFailedLoginState(userRow.passwordFailures, now)).where(eq(users.id, userRow.id));
+    return null;
+  }
+  await db.update(users).set({ passwordFailures: 0, lockedUntil: null, lastSignedIn: now, updatedAt: now }).where(eq(users.id, userRow.id));
+  const token = generateSessionToken();
+  await db.insert(userSessions).values({
+    userId: userRow.id,
+    tokenHash: hashSessionToken(token),
+    expiresAt: new Date(now.getTime() + SESSION_LIFETIME_MS)
+  });
+  return {
+    token,
+    user: { ...userRow, passwordFailures: 0, lockedUntil: null, lastSignedIn: now }
+  };
+}
+async function getUserSession(token) {
+  if (!token) return null;
+  const db = await requireDb();
+  const row = (await db.select({ user: users }).from(userSessions).innerJoin(users, eq(userSessions.userId, users.id)).where(
+    and(
+      eq(userSessions.tokenHash, hashSessionToken(token)),
+      isNull(userSessions.revokedAt),
+      gt(userSessions.expiresAt, /* @__PURE__ */ new Date())
+    )
+  ).limit(1))[0];
+  return row?.user ?? null;
+}
+async function revokeUserSession(token) {
+  if (!token) return;
+  const db = await requireDb();
+  await db.update(userSessions).set({ revokedAt: /* @__PURE__ */ new Date() }).where(and(eq(userSessions.tokenHash, hashSessionToken(token)), isNull(userSessions.revokedAt)));
 }
 function toEmployeeView(employee, sectorName = null) {
   return {
@@ -443,6 +514,8 @@ async function getAttendanceReport(input) {
 }
 
 // server/_core/cookies.ts
+var ADMIN_SESSION_COOKIE = "ponto_admin_session";
+var ADMIN_SESSION_LIFETIME_MS = 12 * 60 * 60 * 1e3;
 function isSecureRequest(req) {
   if (req.protocol === "https") return true;
   const forwardedProto = req.headers["x-forwarded-proto"];
@@ -619,6 +692,14 @@ function employeeCookieOptions(req) {
   const secure = req.protocol === "https" || forwarded === "https" || Array.isArray(forwarded) && forwarded[0] === "https";
   return { httpOnly: true, sameSite: "lax", secure, path: "/", maxAge: 12 * 60 * 60 * 1e3 };
 }
+function getAdminToken(cookieHeader) {
+  return getCookieValue(cookieHeader, ADMIN_SESSION_COOKIE);
+}
+function adminCookieOptions(req) {
+  const forwarded = req.headers["x-forwarded-proto"];
+  const secure = req.protocol === "https" || forwarded === "https" || Array.isArray(forwarded) && forwarded[0] === "https";
+  return { httpOnly: true, sameSite: "lax", secure, path: "/", maxAge: ADMIN_SESSION_LIFETIME_MS };
+}
 async function requireEmployee(cookieHeader) {
   const employee = await getEmployeeSession(getEmployeeToken(cookieHeader));
   if (!employee) throw new TRPCError3({ code: "UNAUTHORIZED", message: "Sua sess\xE3o expirou. Acesse novamente." });
@@ -628,9 +709,17 @@ var appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
+    login: publicProcedure.input(z2.object({ login: z2.string().trim().min(2).max(180), password: passwordSchema })).mutation(async ({ ctx, input }) => {
+      const admin = await loginAdmin(input.login, input.password);
+      if (!admin) throw new TRPCError3({ code: "UNAUTHORIZED", message: "N\xE3o foi poss\xEDvel validar as credenciais administrativas." });
+      ctx.res.cookie(ADMIN_SESSION_COOKIE, admin.token, adminCookieOptions(ctx.req));
+      return { success: true };
+    }),
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      await revokeUserSession(getAdminToken(ctx.req.headers.cookie));
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      ctx.res.clearCookie(ADMIN_SESSION_COOKIE, { ...adminCookieOptions(ctx.req), maxAge: -1 });
       return { success: true };
     })
   }),
@@ -685,6 +774,9 @@ var appRouter = router({
     })
   })
 });
+
+// server/_core/context.ts
+import { parse as parseCookieHeader2 } from "cookie";
 
 // shared/_core/errors.ts
 var HttpError = class extends Error {
@@ -951,6 +1043,12 @@ async function createContext(opts) {
   } catch (error) {
     user = null;
   }
+  if (!user) {
+    const adminToken = parseCookieHeader2(opts.req.headers.cookie ?? "")[ADMIN_SESSION_COOKIE];
+    if (adminToken) {
+      user = await getUserSession(adminToken);
+    }
+  }
   return {
     req: opts.req,
     res: opts.res,
@@ -959,7 +1057,7 @@ async function createContext(opts) {
 }
 
 // server/_core/oauth.ts
-import { parse as parseCookieHeader2 } from "cookie";
+import { parse as parseCookieHeader3 } from "cookie";
 function getQueryParam(req, key) {
   const value = req.query[key];
   return typeof value === "string" ? value : void 0;
@@ -973,7 +1071,7 @@ function registerOAuthRoutes(app) {
       return;
     }
     const { nonce } = decodeOAuthState(state);
-    const expectedNonce = parseCookieHeader2(req.headers.cookie ?? "")[OAUTH_STATE_COOKIE];
+    const expectedNonce = parseCookieHeader3(req.headers.cookie ?? "")[OAUTH_STATE_COOKIE];
     if (!nonce || nonce !== expectedNonce) {
       res.status(403).json({ error: "invalid oauth state" });
       return;

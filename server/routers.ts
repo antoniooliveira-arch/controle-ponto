@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { parse as parseCookieHeader } from "cookie";
 import { COOKIE_NAME } from "@shared/const";
 import {
   createEmployee,
@@ -11,14 +12,16 @@ import {
   listActiveEmployeesForLogin,
   listEmployees,
   listSectors,
+  loginAdmin,
   loginEmployee,
   registerEmployeePunch,
   resetEmployeePassword,
   revokeEmployeeSession,
+  revokeUserSession,
   updateSector,
   updateEmployee,
 } from "./db";
-import { getSessionCookieOptions } from "./_core/cookies";
+import { getSessionCookieOptions, ADMIN_SESSION_COOKIE, ADMIN_SESSION_LIFETIME_MS } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, publicProcedure, router } from "./_core/trpc";
 
@@ -42,6 +45,16 @@ function employeeCookieOptions(req: { protocol?: string; headers: Record<string,
   return { httpOnly: true, sameSite: "lax" as const, secure, path: "/", maxAge: 12 * 60 * 60 * 1000 };
 }
 
+function getAdminToken(cookieHeader: string | undefined) {
+  return getCookieValue(cookieHeader, ADMIN_SESSION_COOKIE);
+}
+
+function adminCookieOptions(req: { protocol?: string; headers: Record<string, string | string[] | undefined> }) {
+  const forwarded = req.headers["x-forwarded-proto"];
+  const secure = req.protocol === "https" || forwarded === "https" || (Array.isArray(forwarded) && forwarded[0] === "https");
+  return { httpOnly: true, sameSite: "lax" as const, secure, path: "/", maxAge: ADMIN_SESSION_LIFETIME_MS };
+}
+
 async function requireEmployee(cookieHeader: string | undefined) {
   const employee = await getEmployeeSession(getEmployeeToken(cookieHeader));
   if (!employee) throw new TRPCError({ code: "UNAUTHORIZED", message: "Sua sessão expirou. Acesse novamente." });
@@ -52,9 +65,17 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
+    login: publicProcedure.input(z.object({ login: z.string().trim().min(2).max(180), password: passwordSchema })).mutation(async ({ ctx, input }) => {
+      const admin = await loginAdmin(input.login, input.password);
+      if (!admin) throw new TRPCError({ code: "UNAUTHORIZED", message: "Não foi possível validar as credenciais administrativas." });
+      ctx.res.cookie(ADMIN_SESSION_COOKIE, admin.token, adminCookieOptions(ctx.req));
+      return { success: true } as const;
+    }),
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      await revokeUserSession(getAdminToken(ctx.req.headers.cookie));
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      ctx.res.clearCookie(ADMIN_SESSION_COOKIE, { ...adminCookieOptions(ctx.req), maxAge: -1 });
       return { success: true } as const;
     }),
   }),

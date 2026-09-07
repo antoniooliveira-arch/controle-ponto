@@ -1,5 +1,8 @@
 import type { CookieOptions, Request } from "express";
 
+export const ADMIN_SESSION_COOKIE = "ponto_admin_session";
+export const ADMIN_SESSION_LIFETIME_MS = 12 * 60 * 60 * 1000;
+
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
 function isIpAddress(host: string) {
