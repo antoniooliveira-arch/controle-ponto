@@ -74,7 +74,6 @@ function LoginScreen() {
             <div className="md:grid md:grid-cols-[minmax(0,1fr)_auto] md:gap-8">
               <div>
                 <p className="login-label text-[#2e7d4e]">Ponto diário · 4 etapas obrigatórias</p>
-                <h1 className="mt-5 font-serif text-4xl font-bold leading-[1.04] tracking-tight text-[#163224] sm:text-5xl lg:text-[3.3rem]">O tempo que organiza o serviço público.</h1>
                 <p className="mt-6 max-w-md text-[15px] leading-relaxed text-stone-600">Registre sua jornada com clareza. Cada movimento é conferido no momento certo, com precisão e segurança.</p>
               </div>
               <img src="/images/ponto-eletronico.svg" alt="Terminal de registro de ponto eletrônico" className="hidden w-[260px] rounded-2xl bg-white/70 p-2 md:block lg:w-[300px] xl:w-[330px]" loading="eager" />
