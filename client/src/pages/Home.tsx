@@ -62,17 +62,7 @@ function LoginScreen() {
           </Button>
         </header>
 
-        <section className="grid flex-1 items-center gap-7 py-8 lg:grid-cols-[1.18fr_0.82fr] lg:gap-12">
-          <div className="overflow-hidden rounded-3xl border border-[#dfe6df] bg-[#edf2ec] p-7 sm:p-10 lg:p-12">
-            <div className="md:grid md:grid-cols-[minmax(0,1fr)_auto] md:gap-8">
-              <div>
-                <p className="login-label text-[#2e7d4e]">Ponto diário · 4 etapas obrigatórias</p>
-                <p className="mt-6 max-w-md text-[15px] leading-relaxed text-stone-600">Registre sua jornada com clareza. Cada movimento é conferido no momento certo, com precisão e segurança.</p>
-              </div>
-              <img src="/images/ponto-eletronico.svg" alt="Terminal de registro de ponto eletrônico" className="hidden w-[260px] rounded-2xl bg-white/70 p-2 md:block lg:w-[300px] xl:w-[330px]" loading="eager" />
-            </div>
-          </div>
-
+        <section className="grid flex-1 items-center py-8">
           <div className="mx-auto w-full max-w-md rounded-3xl border border-[#e5e7e0] bg-white p-7 shadow-[0_24px_48px_-28px_rgba(22,50,36,0.4)] sm:p-9">
             <p className="login-label text-[#2e7d4e]">Acesso do servidor</p>
             <h2 className="mt-3 font-serif text-4xl font-bold tracking-tight text-[#163224]">Identificação</h2>
