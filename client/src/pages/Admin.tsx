@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { businessDateNow, formatDate, formatDuration, formatTime, recordTime } from "@/lib/attendance";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, BarChart3, Check, CircleAlert, Clock3, Eye, EyeOff, FileBarChart, Loader2, LockKeyhole, LogOut, Plus, RefreshCw, Settings2, ShieldCheck, UserCog, Users, X } from "lucide-react";
+import { ArrowLeft, BarChart3, Check, CircleAlert, Clock3, Eye, EyeOff, FileBarChart, FileDown, Loader2, LockKeyhole, LogOut, Plus, RefreshCw, Settings2, ShieldCheck, UserCog, Users, X } from "lucide-react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -133,7 +135,36 @@ function Reports() {
   const [startDate, setStartDate] = useState(businessDateNow); const [endDate, setEndDate] = useState(businessDateNow); const [employeeId, setEmployeeId] = useState("");
   const reportInput = useMemo(() => ({ startDate, endDate, ...(employeeId ? { employeeId: Number(employeeId) } : {}) }), [startDate, endDate, employeeId]);
   const report = trpc.admin.report.useQuery(reportInput);
-  return <section className="admin-page"><div className="admin-title-row"><div><p className="tiny-label">Leitura histórica</p><h2 className="editorial-title mt-3 text-5xl">Relatórios</h2><p className="mt-3 max-w-xl font-serif text-lg text-stone-600">Acompanhe jornadas completas, incompletas e os totais apurados em cada dia de trabalho.</p></div></div><div className="report-filter mt-10"><div><Label className="tiny-label">De</Label><Input type="date" value={startDate} onChange={event => setStartDate(event.target.value)} className="admin-input mt-2" /></div><div><Label className="tiny-label">Até</Label><Input type="date" value={endDate} onChange={event => setEndDate(event.target.value)} className="admin-input mt-2" /></div><div className="min-w-[220px]"><Label className="tiny-label">Servidor</Label><select value={employeeId} onChange={event => setEmployeeId(event.target.value)} className="admin-select mt-2"><option value="">Todos os servidores</option>{employees.data?.map(employee => <option value={employee.id} key={employee.id}>{employee.fullName}</option>)}</select></div></div><div className="admin-table-card mt-8 overflow-x-auto"><table><thead><tr><th>Data e servidor</th><th>Jornada</th><th>Trabalhado</th><th>Intervalo</th><th>Situação</th></tr></thead><tbody>{report.isLoading ? <tr><td colSpan={5} className="py-16 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr> : report.isError ? <tr><td colSpan={5} className="py-16 text-center"><p className="text-stone-600">Não foi possível gerar o relatório solicitado.</p><Button variant="link" onClick={() => report.refetch()} className="mt-2 text-xs">Tentar novamente</Button></td></tr> : report.data?.length ? report.data.map((day, index) => <tr key={`${day.businessDate}-${day.employee?.id}-${index}`}><td><strong>{day.employee?.fullName ?? "Servidor indisponível"}</strong><small>{day.businessDate.split("-").reverse().join("/")} · {day.employee?.registration ?? "—"}</small></td><td className="font-serif text-lg">{formatTime(recordTime(day.records, "ENTRADA"))} <span className="text-stone-300">—</span> {formatTime(recordTime(day.records, "SAIDA_FINAL"))}</td><td>{formatDuration(day.summary.workedSeconds)}</td><td>{formatDuration(day.summary.intervalSeconds)}</td><td><span className={`status-pill ${day.summary.isComplete ? "text-sky-800 bg-sky-100" : "text-amber-800 bg-amber-100"}`}>{day.summary.isComplete ? "Completa" : "Incompleta"}</span></td></tr>) : <tr><td colSpan={5} className="py-16 text-center text-stone-500">Não há batidas registradas para o filtro selecionado.</td></tr>}</tbody></table></div></section>;
+  const downloadPdf = () => {
+    const rows = report.data;
+    if (!rows?.length) return toast.error("Não há dados para emitir o relatório.");
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(29, 74, 47);
+    doc.text("Relatório de jornadas", 14, 16);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(60, 60, 60);
+    doc.text(`Período: ${formatDate(`${startDate}T12:00:00`)} a ${formatDate(`${endDate}T12:00:00`)}${reportInput.employeeId ? ` · Servidor: ${employees.data?.find(e => e.id === reportInput.employeeId)?.fullName ?? ""}` : ""}`, 14, 23);
+    autoTable(doc, {
+      startY: 28,
+      head: [["Data", "Servidor", "Matrícula", "Entrada", "Saída", "Trabalhado", "Intervalo", "Situação"]],
+      body: rows.map(row => [
+        row.businessDate.split("-").reverse().join("/"),
+        row.employee?.fullName ?? "Servidor indisponível",
+        row.employee?.registration ?? "—",
+        formatTime(recordTime(row.records, "ENTRADA")),
+        formatTime(recordTime(row.records, "SAIDA_FINAL")),
+        formatDuration(row.summary.workedSeconds),
+        formatDuration(row.summary.intervalSeconds),
+        row.summary.isComplete ? "Completa" : "Incompleta",
+      ]),
+      styles: { fontSize: 9, cellPadding: 2.5 },
+      headStyles: { fillColor: [29, 74, 47], textColor: 255, fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [245, 247, 244] },
+      margin: { left: 14, right: 14 },
+    });
+    doc.save("relatorio-de-jornadas.pdf");
+    toast.success("Relatório emitido em PDF.");
+  };
+  return <section className="admin-page"><div className="admin-title-row"><div><p className="tiny-label">Leitura histórica</p><h2 className="editorial-title mt-3 text-5xl">Relatórios</h2><p className="mt-3 max-w-xl font-serif text-lg text-stone-600">Acompanhe jornadas completas, incompletas e os totais apurados em cada dia de trabalho.</p></div><div className="flex gap-2"><Button variant="outline" onClick={downloadPdf} disabled={!report.data?.length || report.isLoading} className="h-11 rounded-none border-stone-900/25 text-xs tracking-[0.12em]"><FileDown className="mr-2 h-4 w-4" />Emitir PDF</Button></div></div><div className="report-filter mt-10"><div><Label className="tiny-label">De</Label><Input type="date" value={startDate} onChange={event => setStartDate(event.target.value)} className="admin-input mt-2" /></div><div><Label className="tiny-label">Até</Label><Input type="date" value={endDate} onChange={event => setEndDate(event.target.value)} className="admin-input mt-2" /></div><div className="min-w-[220px]"><Label className="tiny-label">Servidor</Label><select value={employeeId} onChange={event => setEmployeeId(event.target.value)} className="admin-select mt-2"><option value="">Todos os servidores</option>{employees.data?.map(employee => <option value={employee.id} key={employee.id}>{employee.fullName}</option>)}</select></div></div><div className="admin-table-card mt-8 overflow-x-auto"><table><thead><tr><th>Data e servidor</th><th>Jornada</th><th>Trabalhado</th><th>Intervalo</th><th>Situação</th></tr></thead><tbody>{report.isLoading ? <tr><td colSpan={5} className="py-16 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr> : report.isError ? <tr><td colSpan={5} className="py-16 text-center"><p className="text-stone-600">Não foi possível gerar o relatório solicitado.</p><Button variant="link" onClick={() => report.refetch()} className="mt-2 text-xs">Tentar novamente</Button></td></tr> : report.data?.length ? report.data.map((day, index) => <tr key={`${day.businessDate}-${day.employee?.id}-${index}`}><td><strong>{day.employee?.fullName ?? "Servidor indisponível"}</strong><small>{day.businessDate.split("-").reverse().join("/")} · {day.employee?.registration ?? "—"}</small></td><td className="font-serif text-lg">{formatTime(recordTime(day.records, "ENTRADA"))} <span className="text-stone-300">—</span> {formatTime(recordTime(day.records, "SAIDA_FINAL"))}</td><td>{formatDuration(day.summary.workedSeconds)}</td><td>{formatDuration(day.summary.intervalSeconds)}</td><td><span className={`status-pill ${day.summary.isComplete ? "text-sky-800 bg-sky-100" : "text-amber-800 bg-amber-100"}`}>{day.summary.isComplete ? "Completa" : "Incompleta"}</span></td></tr>) : <tr><td colSpan={5} className="py-16 text-center text-stone-500">Não há batidas registradas para o filtro selecionado.</td></tr>}</tbody></table></div></section>;
 }
 
 function Workspace() {
