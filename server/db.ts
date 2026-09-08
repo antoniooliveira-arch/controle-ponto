@@ -233,17 +233,25 @@ export async function getEmployeeToday(employeeId: number) {
   const db = await requireDb();
   const businessDate = getBusinessDate();
   const records = await db
-    .select({ id: timeRecords.id, type: timeRecords.type, recordedAt: timeRecords.recordedAt })
+    .select({ id: timeRecords.id, type: timeRecords.type, recordedAt: timeRecords.recordedAt, latitude: timeRecords.latitude, longitude: timeRecords.longitude })
     .from(timeRecords)
     .where(and(eq(timeRecords.employeeId, employeeId), eq(timeRecords.businessDate, businessDate)))
     .orderBy(asc(timeRecords.recordedAt));
   return { businessDate, records, summary: calculateAttendance(records) };
 }
 
-export async function registerEmployeePunch(employeeId: number) {
+export async function registerEmployeePunch(employeeId: number, location: { latitude: number; longitude: number }) {
   const db = await requireDb();
   const now = new Date();
   const businessDate = getBusinessDate(now);
+
+  if (
+    !Number.isFinite(location.latitude) || !Number.isFinite(location.longitude) ||
+    location.latitude < -90 || location.latitude > 90 ||
+    location.longitude < -180 || location.longitude > 180
+  ) {
+    throw new Error("A coordenada geográfica é obrigatória e inválida. A batida não foi registrada.");
+  }
 
   return db.transaction(async tx => {
     await tx
@@ -276,6 +284,8 @@ export async function registerEmployeePunch(employeeId: number) {
       businessDate,
       type: expected,
       recordedAt: now,
+      latitude: location.latitude,
+      longitude: location.longitude,
     });
     if (expected === "SAIDA_FINAL") {
       await tx.update(workdays).set({ status: "COMPLETE", updatedAt: now }).where(eq(workdays.id, workday.id));

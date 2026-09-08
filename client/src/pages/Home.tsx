@@ -2,9 +2,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { QRCodeSVG } from "qrcode.react";
-import { PUNCH_LABELS, PUNCH_MARKS, PUNCH_SHORT_LABELS, formatDate, formatDuration, formatTime, recordTime, type PunchType } from "@/lib/attendance";
+import { PUNCH_LABELS, PUNCH_MARKS, PUNCH_SHORT_LABELS, formatDate, formatDuration, formatTime, recordTime, requestGeolocation, type PunchType } from "@/lib/attendance";
 import { trpc } from "@/lib/trpc";
-import { CircleAlert, Clock3, Eye, EyeOff, Loader2, LogOut, Settings2 } from "lucide-react";
+import { CircleAlert, Eye, EyeOff, Loader2, LogOut, MapPin, Settings2 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -132,6 +132,20 @@ function EmployeeDashboard({ employee }: { employee: { fullName: string; registr
     },
     onError: error => toast.error(error.message),
   });
+  const [geoBusy, setGeoBusy] = useState(false);
+
+  const handlePunch = async () => {
+    if (punch.isPending || geoBusy) return;
+    setGeoBusy(true);
+    try {
+      const { latitude, longitude } = await requestGeolocation();
+      punch.mutate({ latitude, longitude });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível obter a localização.");
+    } finally {
+      setGeoBusy(false);
+    }
+  };
 
   const current = attendance.data;
   const summary = current?.summary;
@@ -156,7 +170,7 @@ function EmployeeDashboard({ employee }: { employee: { fullName: string; registr
             <h1 className="editorial-title mt-4 text-5xl leading-[0.94] sm:text-7xl">Olá, {employee.fullName.split(" ")[0]}.</h1>
             <div className="mt-10 border-y border-stone-900/15 py-6">
               <p className="tiny-label">Próxima batida permitida</p>
-              {attendance.isLoading ? <Loader2 className="mt-5 h-7 w-7 animate-spin text-stone-500" /> : nextType ? <><h2 className="mt-3 font-serif text-3xl font-semibold">{PUNCH_SHORT_LABELS[nextType]}</h2><Button onClick={() => punch.mutate()} disabled={punch.isPending} className="mt-6 h-14 rounded-none bg-stone-950 px-7 text-xs tracking-[0.17em] hover:bg-stone-800">{punch.isPending ? <Loader2 className="animate-spin" /> : <><Clock3 className="mr-3 h-4 w-4" />{PUNCH_LABELS[nextType]}</>}</Button></> : <><h2 className="mt-3 font-serif text-3xl font-semibold">Jornada encerrada</h2><p className="mt-3 text-stone-600">As quatro etapas previstas para hoje foram registradas.</p></>}
+              {attendance.isLoading ? <Loader2 className="mt-5 h-7 w-7 animate-spin text-stone-500" /> : nextType ? <><h2 className="mt-3 font-serif text-3xl font-semibold">{PUNCH_SHORT_LABELS[nextType]}</h2><Button onClick={handlePunch} disabled={punch.isPending || geoBusy} className="mt-6 h-14 rounded-none bg-stone-950 px-7 text-xs tracking-[0.17em] hover:bg-stone-800">{punch.isPending || geoBusy ? <Loader2 className="animate-spin" /> : <><MapPin className="mr-3 h-4 w-4" />{PUNCH_LABELS[nextType]}</>}</Button><p className="mt-3 text-xs leading-relaxed text-stone-500">A batida requer a localização do dispositivo. Autorize o acesso quando o navegador solicitar.</p></> : <><h2 className="mt-3 font-serif text-3xl font-semibold">Jornada encerrada</h2><p className="mt-3 text-stone-600">As quatro etapas previstas para hoje foram registradas.</p></>}
             </div>
             <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-stone-600"><span>Matrícula <strong className="ml-2 font-medium text-stone-900">{employee.registration}</strong></span>{employee.sectorName ? <span>Setor <strong className="ml-2 font-medium text-stone-900">{employee.sectorName}</strong></span> : null}</div>
           </div>
@@ -174,7 +188,8 @@ function EmployeeDashboard({ employee }: { employee: { fullName: string; registr
           <div className="grid gap-px overflow-hidden bg-stone-900/15 md:grid-cols-2 xl:grid-cols-4">
             {(Object.keys(PUNCH_SHORT_LABELS) as PunchType[]).map((type, index) => {
               const timestamp = recordTime(current?.records ?? [], type);
-              return <article className="bg-[#f5f0e7] p-5" key={type}><div className="flex items-start justify-between"><span className="tiny-label">{PUNCH_MARKS[type]}</span><span className={`h-2 w-2 rounded-full ${timestamp ? "bg-stone-900" : "bg-stone-300"}`} /></div><p className="mt-8 text-sm text-stone-600">{PUNCH_SHORT_LABELS[type]}</p><p className="mt-2 font-serif text-3xl">{timestamp ? formatTime(timestamp) : "—"}</p><p className="mt-3 text-[11px] uppercase tracking-[0.13em] text-stone-500">{timestamp ? "Registrada" : index === doneCount ? "Aguardando" : "Pendente"}</p></article>;
+              const record = current?.records.find(item => item.type === type);
+              return <article className="bg-[#f5f0e7] p-5" key={type}><div className="flex items-start justify-between"><span className="tiny-label">{PUNCH_MARKS[type]}</span><span className={`h-2 w-2 rounded-full ${timestamp ? "bg-stone-900" : "bg-stone-300"}`} /></div><p className="mt-8 text-sm text-stone-600">{PUNCH_SHORT_LABELS[type]}</p><p className="mt-2 font-serif text-3xl">{timestamp ? formatTime(timestamp) : "—"}</p><p className="mt-3 text-[11px] uppercase tracking-[0.13em] text-stone-500">{timestamp ? "Registrada" : index === doneCount ? "Aguardando" : "Pendente"}</p>{record?.latitude != null && record.longitude != null ? <p className="mt-2 flex items-center gap-1 text-[11px] uppercase tracking-[0.13em] text-stone-500"><MapPin className="h-3 w-3 shrink-0" />{record.latitude.toFixed(6)}, {record.longitude.toFixed(6)}</p> : null}</article>;
             })}
           </div>
         </section>

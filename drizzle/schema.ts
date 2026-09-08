@@ -1,5 +1,6 @@
 import {
   boolean,
+  doublePrecision,
   index,
   integer,
   pgEnum,
@@ -139,6 +140,8 @@ export const timeRecords = pgTable(
     businessDate: varchar("businessDate", { length: 10 }).notNull(),
     type: timeRecordTypeEnum("type").notNull(),
     recordedAt: timestamp("recordedAt").notNull(),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => [

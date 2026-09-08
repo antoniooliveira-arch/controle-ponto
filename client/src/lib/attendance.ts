@@ -62,3 +62,30 @@ export function businessDateNow(): string {
 export function recordTime<T extends { type: string; recordedAt: Date | string }>(records: T[], type: string) {
   return records.find(record => record.type === type)?.recordedAt;
 }
+
+export type GeoPosition = { latitude: number; longitude: number };
+
+export function requestGeolocation(): Promise<GeoPosition> {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
+      reject(new Error("Este dispositivo não permite acessar a localização. Use um navegador como Chrome e tente novamente."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      position => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+      error => {
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            reject(new Error("Para registrar a batida é obrigatório autorizar o acesso à localização. Habilite a permissão no navegador e tente novamente."));
+            break;
+          case error.POSITION_UNAVAILABLE:
+            reject(new Error("Não foi possível obter a localização. Verifique se o GPS está ativo e tente novamente."));
+            break;
+          default:
+            reject(new Error("A obtenção da localização expirou. Verifique o sinal e tente novamente."));
+        }
+      },
+      { enableHighAccuracy: true, timeout: 20_000, maximumAge: 0 },
+    );
+  });
+}

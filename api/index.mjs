@@ -36,6 +36,7 @@ import { Pool } from "pg";
 // drizzle/schema.ts
 import {
   boolean,
+  doublePrecision,
   index,
   integer,
   pgEnum,
@@ -165,6 +166,8 @@ var timeRecords = pgTable(
     businessDate: varchar("businessDate", { length: 10 }).notNull(),
     type: timeRecordTypeEnum("type").notNull(),
     recordedAt: timestamp("recordedAt").notNull(),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
     createdAt: timestamp("createdAt").defaultNow().notNull()
   },
   (table) => [
@@ -442,13 +445,16 @@ async function revokeEmployeeSession(token) {
 async function getEmployeeToday(employeeId) {
   const db = await requireDb();
   const businessDate = getBusinessDate();
-  const records = await db.select({ id: timeRecords.id, type: timeRecords.type, recordedAt: timeRecords.recordedAt }).from(timeRecords).where(and(eq(timeRecords.employeeId, employeeId), eq(timeRecords.businessDate, businessDate))).orderBy(asc(timeRecords.recordedAt));
+  const records = await db.select({ id: timeRecords.id, type: timeRecords.type, recordedAt: timeRecords.recordedAt, latitude: timeRecords.latitude, longitude: timeRecords.longitude }).from(timeRecords).where(and(eq(timeRecords.employeeId, employeeId), eq(timeRecords.businessDate, businessDate))).orderBy(asc(timeRecords.recordedAt));
   return { businessDate, records, summary: calculateAttendance(records) };
 }
-async function registerEmployeePunch(employeeId) {
+async function registerEmployeePunch(employeeId, location) {
   const db = await requireDb();
   const now = /* @__PURE__ */ new Date();
   const businessDate = getBusinessDate(now);
+  if (!Number.isFinite(location.latitude) || !Number.isFinite(location.longitude) || location.latitude < -90 || location.latitude > 90 || location.longitude < -180 || location.longitude > 180) {
+    throw new Error("A coordenada geogr\xE1fica \xE9 obrigat\xF3ria e inv\xE1lida. A batida n\xE3o foi registrada.");
+  }
   return db.transaction(async (tx) => {
     await tx.insert(workdays).values({ employeeId, businessDate, status: "OPEN" }).onConflictDoUpdate({ target: [workdays.employeeId, workdays.businessDate], set: { updatedAt: now } });
     const workday = (await tx.select().from(workdays).where(and(eq(workdays.employeeId, employeeId), eq(workdays.businessDate, businessDate))).limit(1))[0];
@@ -463,7 +469,9 @@ async function registerEmployeePunch(employeeId) {
       employeeId,
       businessDate,
       type: expected,
-      recordedAt: now
+      recordedAt: now,
+      latitude: location.latitude,
+      longitude: location.longitude
     });
     if (expected === "SAIDA_FINAL") {
       await tx.update(workdays).set({ status: "COMPLETE", updatedAt: now }).where(eq(workdays.id, workday.id));
@@ -883,9 +891,12 @@ var appRouter = router({
       const employee = await requireEmployee(ctx.req.headers.cookie);
       return getEmployeeToday(employee.id);
     }),
-    punch: publicProcedure.mutation(async ({ ctx }) => {
+    punch: publicProcedure.input(z2.object({
+      latitude: z2.number().min(-90).max(90),
+      longitude: z2.number().min(-180).max(180)
+    })).mutation(async ({ ctx, input }) => {
       const employee = await requireEmployee(ctx.req.headers.cookie);
-      return registerEmployeePunch(employee.id);
+      return registerEmployeePunch(employee.id, input);
     })
   }),
   admin: router({

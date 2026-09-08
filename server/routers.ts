@@ -127,9 +127,12 @@ export const appRouter = router({
       const employee = await requireEmployee(ctx.req.headers.cookie);
       return getEmployeeToday(employee.id);
     }),
-    punch: publicProcedure.mutation(async ({ ctx }) => {
+    punch: publicProcedure.input(z.object({
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+    })).mutation(async ({ ctx, input }) => {
       const employee = await requireEmployee(ctx.req.headers.cookie);
-      return registerEmployeePunch(employee.id);
+      return registerEmployeePunch(employee.id, input);
     }),
   }),
   admin: router({
