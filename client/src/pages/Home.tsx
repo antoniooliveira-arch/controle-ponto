@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { QRCodeSVG } from "qrcode.react";
 import { PUNCH_LABELS, PUNCH_MARKS, PUNCH_SHORT_LABELS, formatDate, formatDuration, formatTime, recordTime, type PunchType } from "@/lib/attendance";
 import { trpc } from "@/lib/trpc";
-import { CircleAlert, Clock3, Eye, EyeOff, FileCheck2, Loader2, LogOut, Settings2, ShieldCheck, Timer } from "lucide-react";
+import { CircleAlert, Clock3, Eye, EyeOff, Loader2, LogOut, Settings2 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -22,13 +22,6 @@ function LiveClock() {
     </div>
   );
 }
-
-const LOGIN_FEATURES = [
-  { icon: ShieldCheck, title: "Controle de acesso", sub: "Mais segurança" },
-  { icon: FileCheck2, title: "Registros precisos", sub: "Informações organizadas" },
-  { icon: Eye, title: "Transparência", sub: "Para todos" },
-  { icon: Timer, title: "Jornada", sub: "Controle simplificado" },
-];
 
 function LoginScreen() {
   const [, setLocation] = useLocation();
@@ -77,15 +70,6 @@ function LoginScreen() {
                 <p className="mt-6 max-w-md text-[15px] leading-relaxed text-stone-600">Registre sua jornada com clareza. Cada movimento é conferido no momento certo, com precisão e segurança.</p>
               </div>
               <img src="/images/ponto-eletronico.svg" alt="Terminal de registro de ponto eletrônico" className="hidden w-[260px] rounded-2xl bg-white/70 p-2 md:block lg:w-[300px] xl:w-[330px]" loading="eager" />
-            </div>
-            <div className="mt-9 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:mt-12 lg:gap-4">
-              {LOGIN_FEATURES.map(feature => (
-                <div key={feature.title} className="rounded-xl bg-white/80 p-4">
-                  <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#e4f0e8]"><feature.icon className="h-4 w-4 text-[#1d4a2f]" strokeWidth={1.8} /></span>
-                  <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.12em] text-[#2a4032]">{feature.title}</p>
-                  <p className="mt-1 text-xs text-stone-600">{feature.sub}</p>
-                </div>
-              ))}
             </div>
           </div>
 
