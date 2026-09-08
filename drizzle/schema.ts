@@ -55,6 +55,10 @@ export const employees = pgTable(
     fullName: varchar("fullName", { length: 180 }).notNull(),
     registration: varchar("registration", { length: 64 }).notNull(),
     sectorId: integer("sectorId").references(() => sectors.id, { onDelete: "set null" }),
+    funcao: varchar("funcao", { length: 180 }),
+    cargo: varchar("cargo", { length: 180 }),
+    lotacaoLocal: varchar("lotacaoLocal", { length: 180 }),
+    cargaHoraria: varchar("cargaHoraria", { length: 20 }).default("8h"),
     passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
     active: boolean("active").default(true).notNull(),
     passwordFailures: integer("passwordFailures").default(0).notNull(),
@@ -142,6 +146,31 @@ export const timeRecords = pgTable(
     index("time_records_employee_date_idx").on(table.employeeId, table.businessDate),
     index("time_records_date_idx").on(table.businessDate),
   ],
+);
+
+export const holidays = pgTable(
+  "holidays",
+  {
+    id: serial("id").primaryKey(),
+    date: varchar("date", { length: 10 }).notNull(),
+    description: varchar("description", { length: 180 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [uniqueIndex("holidays_date_unique").on(table.date)],
+);
+
+export const reportLogs = pgTable(
+  "report_logs",
+  {
+    id: serial("id").primaryKey(),
+    employeeId: integer("employeeId").notNull().references(() => employees.id, { onDelete: "cascade" }),
+    month: integer("month").notNull(),
+    year: integer("year").notNull(),
+    issuedBy: varchar("issuedBy", { length: 180 }),
+    issuedAt: timestamp("issuedAt").defaultNow().notNull(),
+    fileName: varchar("fileName", { length: 255 }),
+  },
+  table => [index("report_logs_employee_month_year_idx").on(table.employeeId, table.month, table.year)],
 );
 
 export type User = typeof users.$inferSelect;

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { parse as parseCookieHeader } from "cookie";
 import { COOKIE_NAME } from "@shared/const";
 import {
+  addHoliday,
   changeOwnAdminPassword,
   createEmployee,
   createSector,
@@ -10,12 +11,17 @@ import {
   getAttendanceReport,
   getEmployeeSession,
   getEmployeeToday,
+  getMonthlyReport,
   listActiveEmployeesForLogin,
   listEmployees,
+  listHolidays,
+  listReportLogs,
   listSectors,
   loginAdmin,
   loginEmployee,
+  logReport,
   registerEmployeePunch,
+  removeHoliday,
   resetEmployeePassword,
   revokeEmployeeSession,
   revokeUserSession,
@@ -136,6 +142,10 @@ export const appRouter = router({
       fullName: z.string().trim().min(3).max(180),
       registration: z.string().trim().min(2).max(64),
       sectorId: z.number().int().positive().nullable().optional(),
+      funcao: z.string().trim().max(180).nullable().optional(),
+      cargo: z.string().trim().max(180).nullable().optional(),
+      lotacaoLocal: z.string().trim().max(180).nullable().optional(),
+      cargaHoraria: z.string().trim().max(20).nullable().optional(),
       password: employeePasswordSchema,
     })).mutation(({ input }) => createEmployee(input)),
     updateEmployee: adminProcedure.input(z.object({
@@ -143,6 +153,10 @@ export const appRouter = router({
       fullName: z.string().trim().min(3).max(180),
       registration: z.string().trim().min(2).max(64),
       sectorId: z.number().int().positive().nullable().optional(),
+      funcao: z.string().trim().max(180).nullable().optional(),
+      cargo: z.string().trim().max(180).nullable().optional(),
+      lotacaoLocal: z.string().trim().max(180).nullable().optional(),
+      cargaHoraria: z.string().trim().max(20).nullable().optional(),
       active: z.boolean(),
     })).mutation(({ input }) => updateEmployee(input.employeeId, input)),
     resetPassword: adminProcedure.input(z.object({ employeeId: z.number().int().positive(), password: employeePasswordSchema })).mutation(({ input }) => resetEmployeePassword(input.employeeId, input.password)),
@@ -154,6 +168,14 @@ export const appRouter = router({
       if (input.startDate > input.endDate) throw new TRPCError({ code: "BAD_REQUEST", message: "O período informado é inválido." });
       return getAttendanceReport(input);
     }),
+    monthlyReport: adminProcedure
+      .input(z.object({ employeeId: z.number().int().positive(), month: z.number().int().min(1).max(12), year: z.number().int().min(2000).max(2100) }))
+      .query(({ input }) => getMonthlyReport(input)),
+    holidays: adminProcedure.query(() => listHolidays()),
+    addHoliday: adminProcedure.input(z.object({ date: dateSchema, description: z.string().trim().max(180).optional() })).mutation(({ input }) => addHoliday(input.date, input.description)),
+    removeHoliday: adminProcedure.input(z.object({ date: dateSchema })).mutation(({ input }) => removeHoliday(input.date)),
+    reportLogs: adminProcedure.query(() => listReportLogs()),
+    logReport: adminProcedure.input(z.object({ employeeId: z.number().int().positive(), month: z.number().int().min(1).max(12), year: z.number().int().min(2000).max(2100), issuedBy: z.string().trim().max(180).nullable().optional(), fileName: z.string().trim().max(255).nullable().optional() })).mutation(({ input }) => logReport(input)),
   }),
 });
 

@@ -4,7 +4,9 @@ import { Pool } from "pg";
 import {
   employees,
   employeeSessions,
+  holidays,
   InsertUser,
+  reportLogs,
   sectors,
   timeRecords,
   userSessions,
@@ -138,9 +140,27 @@ function toEmployeeView(employee: typeof employees.$inferSelect, sectorName: str
     registration: employee.registration,
     sectorId: employee.sectorId,
     sectorName,
+    funcao: employee.funcao,
+    cargo: employee.cargo,
+    lotacaoLocal: employee.lotacaoLocal,
+    cargaHoraria: employee.cargaHoraria,
     active: employee.active,
     lockedUntil: employee.lockedUntil,
     createdAt: employee.createdAt,
+  };
+}
+
+export function toReportEmployeeView(employee: typeof employees.$inferSelect, sectorName: string | null = null) {
+  return {
+    id: employee.id,
+    fullName: employee.fullName,
+    registration: employee.registration,
+    sectorId: employee.sectorId,
+    sectorName,
+    funcao: employee.funcao ?? "",
+    cargo: employee.cargo ?? "",
+    lotacaoLocal: employee.lotacaoLocal ?? sectorName ?? "",
+    cargaHoraria: employee.cargaHoraria ?? "8h",
   };
 }
 
@@ -297,6 +317,10 @@ export async function createEmployee(input: {
   registration: string;
   sectorId?: number | null;
   password: string;
+  funcao?: string | null;
+  cargo?: string | null;
+  lotacaoLocal?: string | null;
+  cargaHoraria?: string | null;
 }) {
   const db = await requireDb();
   const passwordHash = await hashPassword(input.password);
@@ -304,6 +328,10 @@ export async function createEmployee(input: {
     fullName: input.fullName.trim(),
     registration: input.registration.trim(),
     sectorId: input.sectorId ?? null,
+    funcao: input.funcao?.trim() || null,
+    cargo: input.cargo?.trim() || null,
+    lotacaoLocal: input.lotacaoLocal?.trim() || null,
+    cargaHoraria: input.cargaHoraria?.trim() || null,
     passwordHash,
   }).returning({ id: employees.id });
   return result[0].id;
@@ -311,7 +339,16 @@ export async function createEmployee(input: {
 
 export async function updateEmployee(
   employeeId: number,
-  input: { fullName: string; registration: string; sectorId?: number | null; active: boolean },
+  input: {
+    fullName: string;
+    registration: string;
+    sectorId?: number | null;
+    active: boolean;
+    funcao?: string | null;
+    cargo?: string | null;
+    lotacaoLocal?: string | null;
+    cargaHoraria?: string | null;
+  },
 ) {
   const db = await requireDb();
   await db
@@ -320,6 +357,10 @@ export async function updateEmployee(
       fullName: input.fullName.trim(),
       registration: input.registration.trim(),
       sectorId: input.sectorId ?? null,
+      funcao: input.funcao?.trim() || null,
+      cargo: input.cargo?.trim() || null,
+      lotacaoLocal: input.lotacaoLocal?.trim() || null,
+      cargaHoraria: input.cargaHoraria?.trim() || null,
       active: input.active,
     })
     .where(eq(employees.id, employeeId));
@@ -398,5 +439,113 @@ export async function getAttendanceReport(input: { startDate: string; endDate: s
       records: dayRecords,
       summary: calculateAttendance(dayRecords, new Date(), false),
     };
+  });
+}
+
+export async function listHolidays() {
+  const db = await requireDb();
+  return db.select().from(holidays).orderBy(asc(holidays.date));
+}
+
+export async function addHoliday(date: string, description?: string) {
+  const db = await requireDb();
+  await db
+    .insert(holidays)
+    .values({ date, description: description?.trim() || null })
+    .onConflictDoUpdate({ target: holidays.date, set: { description: description?.trim() || null } });
+}
+
+export async function removeHoliday(date: string) {
+  const db = await requireDb();
+  await db.delete(holidays).where(eq(holidays.date, date));
+}
+
+export async function getMonthlyReport(input: { employeeId: number; month: number; year: number }) {
+  const db = await requireDb();
+  const employeeRow = (
+    await db
+      .select({ employee: employees, sectorName: sectors.name })
+      .from(employees)
+      .leftJoin(sectors, eq(employees.sectorId, sectors.id))
+      .where(eq(employees.id, input.employeeId))
+      .limit(1)
+  )[0];
+  if (!employeeRow) return null;
+
+  const startDate = `${input.year}-${String(input.month).padStart(2, "0")}-01`;
+  const monthEnd = new Date(input.year, input.month, 0);
+  const endDate = `${input.year}-${String(input.month).padStart(2, "0")}-${String(monthEnd.getDate()).padStart(2, "0")}`;
+
+  const records = await db
+    .select({
+      businessDate: timeRecords.businessDate,
+      type: timeRecords.type,
+      recordedAt: timeRecords.recordedAt,
+    })
+    .from(timeRecords)
+    .where(
+      and(
+        eq(timeRecords.employeeId, input.employeeId),
+        gte(timeRecords.businessDate, startDate),
+        lte(timeRecords.businessDate, endDate),
+      ),
+    )
+    .orderBy(asc(timeRecords.businessDate), asc(timeRecords.recordedAt));
+
+  const daysInMonth = monthEnd.getDate();
+  const dayRecords: { [day: number]: { type: string; recordedAt: Date }[] } = {};
+  records.forEach(record => {
+    const day = Number(record.businessDate.slice(8, 10));
+    dayRecords[day] = [...(dayRecords[day] ?? []), { type: record.type, recordedAt: record.recordedAt }];
+  });
+
+  return {
+    employee: toReportEmployeeView(employeeRow.employee, employeeRow.sectorName),
+    month: input.month,
+    year: input.year,
+    startDate,
+    endDate,
+    days: Array.from({ length: daysInMonth }, (_, index) => index + 1).map(day => ({
+      day,
+      records: dayRecords[day] ?? [],
+    })),
+  };
+}
+
+export async function listReportLogs(limit = 50) {
+  const db = await requireDb();
+  return db
+    .select({
+      id: reportLogs.id,
+      employeeId: reportLogs.employeeId,
+      month: reportLogs.month,
+      year: reportLogs.year,
+      issuedBy: reportLogs.issuedBy,
+      issuedAt: reportLogs.issuedAt,
+      fileName: reportLogs.fileName,
+      employeeName: employees.fullName,
+      registration: employees.registration,
+      lotacaoLocal: employees.lotacaoLocal,
+    })
+    .from(reportLogs)
+    .leftJoin(employees, eq(reportLogs.employeeId, employees.id))
+    .orderBy(desc(reportLogs.issuedAt))
+    .limit(limit);
+}
+
+export async function logReport(input: {
+  employeeId: number;
+  month: number;
+  year: number;
+  issuedBy?: string | null;
+  fileName?: string | null;
+}) {
+  const db = await requireDb();
+  await db.insert(reportLogs).values({
+    employeeId: input.employeeId,
+    month: input.month,
+    year: input.year,
+    issuedBy: input.issuedBy ?? null,
+    fileName: input.fileName ?? null,
   });
 }

@@ -87,6 +87,10 @@ var employees = pgTable(
     fullName: varchar("fullName", { length: 180 }).notNull(),
     registration: varchar("registration", { length: 64 }).notNull(),
     sectorId: integer("sectorId").references(() => sectors.id, { onDelete: "set null" }),
+    funcao: varchar("funcao", { length: 180 }),
+    cargo: varchar("cargo", { length: 180 }),
+    lotacaoLocal: varchar("lotacaoLocal", { length: 180 }),
+    cargaHoraria: varchar("cargaHoraria", { length: 20 }).default("8h"),
     passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
     active: boolean("active").default(true).notNull(),
     passwordFailures: integer("passwordFailures").default(0).notNull(),
@@ -168,6 +172,29 @@ var timeRecords = pgTable(
     index("time_records_employee_date_idx").on(table.employeeId, table.businessDate),
     index("time_records_date_idx").on(table.businessDate)
   ]
+);
+var holidays = pgTable(
+  "holidays",
+  {
+    id: serial("id").primaryKey(),
+    date: varchar("date", { length: 10 }).notNull(),
+    description: varchar("description", { length: 180 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull()
+  },
+  (table) => [uniqueIndex("holidays_date_unique").on(table.date)]
+);
+var reportLogs = pgTable(
+  "report_logs",
+  {
+    id: serial("id").primaryKey(),
+    employeeId: integer("employeeId").notNull().references(() => employees.id, { onDelete: "cascade" }),
+    month: integer("month").notNull(),
+    year: integer("year").notNull(),
+    issuedBy: varchar("issuedBy", { length: 180 }),
+    issuedAt: timestamp("issuedAt").defaultNow().notNull(),
+    fileName: varchar("fileName", { length: 255 })
+  },
+  (table) => [index("report_logs_employee_month_year_idx").on(table.employeeId, table.month, table.year)]
 );
 
 // server/attendance.ts
@@ -349,9 +376,26 @@ function toEmployeeView(employee, sectorName = null) {
     registration: employee.registration,
     sectorId: employee.sectorId,
     sectorName,
+    funcao: employee.funcao,
+    cargo: employee.cargo,
+    lotacaoLocal: employee.lotacaoLocal,
+    cargaHoraria: employee.cargaHoraria,
     active: employee.active,
     lockedUntil: employee.lockedUntil,
     createdAt: employee.createdAt
+  };
+}
+function toReportEmployeeView(employee, sectorName = null) {
+  return {
+    id: employee.id,
+    fullName: employee.fullName,
+    registration: employee.registration,
+    sectorId: employee.sectorId,
+    sectorName,
+    funcao: employee.funcao ?? "",
+    cargo: employee.cargo ?? "",
+    lotacaoLocal: employee.lotacaoLocal ?? sectorName ?? "",
+    cargaHoraria: employee.cargaHoraria ?? "8h"
   };
 }
 async function listActiveEmployeesForLogin() {
@@ -453,6 +497,10 @@ async function createEmployee(input) {
     fullName: input.fullName.trim(),
     registration: input.registration.trim(),
     sectorId: input.sectorId ?? null,
+    funcao: input.funcao?.trim() || null,
+    cargo: input.cargo?.trim() || null,
+    lotacaoLocal: input.lotacaoLocal?.trim() || null,
+    cargaHoraria: input.cargaHoraria?.trim() || null,
     passwordHash
   }).returning({ id: employees.id });
   return result[0].id;
@@ -463,6 +511,10 @@ async function updateEmployee(employeeId, input) {
     fullName: input.fullName.trim(),
     registration: input.registration.trim(),
     sectorId: input.sectorId ?? null,
+    funcao: input.funcao?.trim() || null,
+    cargo: input.cargo?.trim() || null,
+    lotacaoLocal: input.lotacaoLocal?.trim() || null,
+    cargaHoraria: input.cargaHoraria?.trim() || null,
     active: input.active
   }).where(eq(employees.id, employeeId));
   if (!input.active) {
@@ -515,6 +567,79 @@ async function getAttendanceReport(input) {
       records: dayRecords,
       summary: calculateAttendance(dayRecords, /* @__PURE__ */ new Date(), false)
     };
+  });
+}
+async function listHolidays() {
+  const db = await requireDb();
+  return db.select().from(holidays).orderBy(asc(holidays.date));
+}
+async function addHoliday(date, description) {
+  const db = await requireDb();
+  await db.insert(holidays).values({ date, description: description?.trim() || null }).onConflictDoUpdate({ target: holidays.date, set: { description: description?.trim() || null } });
+}
+async function removeHoliday(date) {
+  const db = await requireDb();
+  await db.delete(holidays).where(eq(holidays.date, date));
+}
+async function getMonthlyReport(input) {
+  const db = await requireDb();
+  const employeeRow = (await db.select({ employee: employees, sectorName: sectors.name }).from(employees).leftJoin(sectors, eq(employees.sectorId, sectors.id)).where(eq(employees.id, input.employeeId)).limit(1))[0];
+  if (!employeeRow) return null;
+  const startDate = `${input.year}-${String(input.month).padStart(2, "0")}-01`;
+  const monthEnd = new Date(input.year, input.month, 0);
+  const endDate = `${input.year}-${String(input.month).padStart(2, "0")}-${String(monthEnd.getDate()).padStart(2, "0")}`;
+  const records = await db.select({
+    businessDate: timeRecords.businessDate,
+    type: timeRecords.type,
+    recordedAt: timeRecords.recordedAt
+  }).from(timeRecords).where(
+    and(
+      eq(timeRecords.employeeId, input.employeeId),
+      gte(timeRecords.businessDate, startDate),
+      lte(timeRecords.businessDate, endDate)
+    )
+  ).orderBy(asc(timeRecords.businessDate), asc(timeRecords.recordedAt));
+  const daysInMonth = monthEnd.getDate();
+  const dayRecords = {};
+  records.forEach((record) => {
+    const day = Number(record.businessDate.slice(8, 10));
+    dayRecords[day] = [...dayRecords[day] ?? [], { type: record.type, recordedAt: record.recordedAt }];
+  });
+  return {
+    employee: toReportEmployeeView(employeeRow.employee, employeeRow.sectorName),
+    month: input.month,
+    year: input.year,
+    startDate,
+    endDate,
+    days: Array.from({ length: daysInMonth }, (_, index2) => index2 + 1).map((day) => ({
+      day,
+      records: dayRecords[day] ?? []
+    }))
+  };
+}
+async function listReportLogs(limit = 50) {
+  const db = await requireDb();
+  return db.select({
+    id: reportLogs.id,
+    employeeId: reportLogs.employeeId,
+    month: reportLogs.month,
+    year: reportLogs.year,
+    issuedBy: reportLogs.issuedBy,
+    issuedAt: reportLogs.issuedAt,
+    fileName: reportLogs.fileName,
+    employeeName: employees.fullName,
+    registration: employees.registration,
+    lotacaoLocal: employees.lotacaoLocal
+  }).from(reportLogs).leftJoin(employees, eq(reportLogs.employeeId, employees.id)).orderBy(desc(reportLogs.issuedAt)).limit(limit);
+}
+async function logReport(input) {
+  const db = await requireDb();
+  await db.insert(reportLogs).values({
+    employeeId: input.employeeId,
+    month: input.month,
+    year: input.year,
+    issuedBy: input.issuedBy ?? null,
+    fileName: input.fileName ?? null
   });
 }
 
@@ -773,6 +898,10 @@ var appRouter = router({
       fullName: z2.string().trim().min(3).max(180),
       registration: z2.string().trim().min(2).max(64),
       sectorId: z2.number().int().positive().nullable().optional(),
+      funcao: z2.string().trim().max(180).nullable().optional(),
+      cargo: z2.string().trim().max(180).nullable().optional(),
+      lotacaoLocal: z2.string().trim().max(180).nullable().optional(),
+      cargaHoraria: z2.string().trim().max(20).nullable().optional(),
       password: employeePasswordSchema
     })).mutation(({ input }) => createEmployee(input)),
     updateEmployee: adminProcedure.input(z2.object({
@@ -780,6 +909,10 @@ var appRouter = router({
       fullName: z2.string().trim().min(3).max(180),
       registration: z2.string().trim().min(2).max(64),
       sectorId: z2.number().int().positive().nullable().optional(),
+      funcao: z2.string().trim().max(180).nullable().optional(),
+      cargo: z2.string().trim().max(180).nullable().optional(),
+      lotacaoLocal: z2.string().trim().max(180).nullable().optional(),
+      cargaHoraria: z2.string().trim().max(20).nullable().optional(),
       active: z2.boolean()
     })).mutation(({ input }) => updateEmployee(input.employeeId, input)),
     resetPassword: adminProcedure.input(z2.object({ employeeId: z2.number().int().positive(), password: employeePasswordSchema })).mutation(({ input }) => resetEmployeePassword(input.employeeId, input.password)),
@@ -790,7 +923,13 @@ var appRouter = router({
     report: adminProcedure.input(z2.object({ startDate: dateSchema, endDate: dateSchema, employeeId: z2.number().int().positive().optional() })).query(({ input }) => {
       if (input.startDate > input.endDate) throw new TRPCError3({ code: "BAD_REQUEST", message: "O per\xEDodo informado \xE9 inv\xE1lido." });
       return getAttendanceReport(input);
-    })
+    }),
+    monthlyReport: adminProcedure.input(z2.object({ employeeId: z2.number().int().positive(), month: z2.number().int().min(1).max(12), year: z2.number().int().min(2e3).max(2100) })).query(({ input }) => getMonthlyReport(input)),
+    holidays: adminProcedure.query(() => listHolidays()),
+    addHoliday: adminProcedure.input(z2.object({ date: dateSchema, description: z2.string().trim().max(180).optional() })).mutation(({ input }) => addHoliday(input.date, input.description)),
+    removeHoliday: adminProcedure.input(z2.object({ date: dateSchema })).mutation(({ input }) => removeHoliday(input.date)),
+    reportLogs: adminProcedure.query(() => listReportLogs()),
+    logReport: adminProcedure.input(z2.object({ employeeId: z2.number().int().positive(), month: z2.number().int().min(1).max(12), year: z2.number().int().min(2e3).max(2100), issuedBy: z2.string().trim().max(180).nullable().optional(), fileName: z2.string().trim().max(255).nullable().optional() })).mutation(({ input }) => logReport(input))
   })
 });
 
