@@ -62,7 +62,6 @@ function LoginScreen() {
             <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#1d4a2f] font-serif text-sm font-bold tracking-[0.14em] text-white">CP</span>
             <div className="leading-tight">
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#1d4a2f]">Sistema de gestão de jornada</p>
-              <p className="text-[11px] text-stone-500">Departamento de Tecnologia · SME</p>
             </div>
           </div>
           <Button variant="ghost" onClick={() => setLocation("/administracao")} className="h-9 rounded-lg px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#1d4a2f] hover:bg-[#e4ece6] hover:text-[#143a27]">
