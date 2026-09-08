@@ -542,7 +542,7 @@ async function changeOwnAdminPassword(adminId, password) {
 async function getAdminDashboard(businessDate = getBusinessDate()) {
   const db = await requireDb();
   const employeeRows = await db.select({ employee: employees, sectorName: sectors.name }).from(employees).leftJoin(sectors, eq(employees.sectorId, sectors.id)).where(eq(employees.active, true)).orderBy(asc(employees.fullName));
-  const records = await db.select({ employeeId: timeRecords.employeeId, type: timeRecords.type, recordedAt: timeRecords.recordedAt }).from(timeRecords).where(eq(timeRecords.businessDate, businessDate)).orderBy(asc(timeRecords.recordedAt));
+  const records = await db.select({ employeeId: timeRecords.employeeId, type: timeRecords.type, recordedAt: timeRecords.recordedAt, latitude: timeRecords.latitude, longitude: timeRecords.longitude }).from(timeRecords).where(eq(timeRecords.businessDate, businessDate)).orderBy(asc(timeRecords.recordedAt));
   const byEmployee = /* @__PURE__ */ new Map();
   records.forEach((record) => byEmployee.set(record.employeeId, [...byEmployee.get(record.employeeId) ?? [], record]));
   return {

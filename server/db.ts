@@ -406,7 +406,7 @@ export async function getAdminDashboard(businessDate = getBusinessDate()) {
     .where(eq(employees.active, true))
     .orderBy(asc(employees.fullName));
   const records = await db
-    .select({ employeeId: timeRecords.employeeId, type: timeRecords.type, recordedAt: timeRecords.recordedAt })
+    .select({ employeeId: timeRecords.employeeId, type: timeRecords.type, recordedAt: timeRecords.recordedAt, latitude: timeRecords.latitude, longitude: timeRecords.longitude })
     .from(timeRecords)
     .where(eq(timeRecords.businessDate, businessDate))
     .orderBy(asc(timeRecords.recordedAt));

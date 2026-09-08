@@ -65,6 +65,14 @@ export function recordTime<T extends { type: string; recordedAt: Date | string }
 
 export type GeoPosition = { latitude: number; longitude: number };
 
+export function recordCoordinates<T extends { type: string; latitude?: number | null; longitude?: number | null }>(records: T[], type: string): string | null {
+  const record = records.find(item => item.type === type);
+  if (record && record.latitude != null && record.longitude != null) {
+    return `${record.latitude.toFixed(6)}, ${record.longitude.toFixed(6)}`;
+  }
+  return null;
+}
+
 export function requestGeolocation(): Promise<GeoPosition> {
   return new Promise((resolve, reject) => {
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
