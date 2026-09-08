@@ -491,6 +491,8 @@ export async function getMonthlyReport(input: { employeeId: number; month: numbe
       businessDate: timeRecords.businessDate,
       type: timeRecords.type,
       recordedAt: timeRecords.recordedAt,
+      latitude: timeRecords.latitude,
+      longitude: timeRecords.longitude,
     })
     .from(timeRecords)
     .where(
@@ -503,10 +505,10 @@ export async function getMonthlyReport(input: { employeeId: number; month: numbe
     .orderBy(asc(timeRecords.businessDate), asc(timeRecords.recordedAt));
 
   const daysInMonth = monthEnd.getDate();
-  const dayRecords: { [day: number]: { type: string; recordedAt: Date }[] } = {};
+  const dayRecords: { [day: number]: { type: string; recordedAt: Date; latitude: number | null; longitude: number | null }[] } = {};
   records.forEach(record => {
     const day = Number(record.businessDate.slice(8, 10));
-    dayRecords[day] = [...(dayRecords[day] ?? []), { type: record.type, recordedAt: record.recordedAt }];
+    dayRecords[day] = [...(dayRecords[day] ?? []), { type: record.type, recordedAt: record.recordedAt, latitude: record.latitude, longitude: record.longitude }];
   });
 
   return {

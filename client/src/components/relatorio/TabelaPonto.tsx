@@ -11,6 +11,12 @@ export function TabelaPonto({
   month: number;
   days: DayRow[];
 }) {
+  const PunchCell = ({ value, coord }: { value: string; coord: string | null }) => (
+    <span>
+      <span className="block">{value}</span>
+      {coord && <span className="block text-[8px] font-normal text-stone-500">{coord}</span>}
+    </span>
+  );
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-[11px] leading-none">
@@ -41,14 +47,20 @@ export function TabelaPonto({
               </td>
               <td className="border border-stone-800/70 px-1.5 py-1 text-center font-medium">{day.weekday}</td>
               <td className={`border border-stone-800/70 px-1.5 py-1 text-center ${day.entrada1 ? "font-semibold text-stone-900" : ""}`}>
-                {day.entrada1}
+                <PunchCell value={day.entrada1} coord={day.entrada1Coord} />
               </td>
               <td className="border border-stone-800/70 px-1.5 py-1 text-left">
                 {day.isHoliday && day.marked && <span className="text-[9px] italic text-stone-400">{day.holidayDescription}</span>}
               </td>
-              <td className="border border-stone-800/70 px-1.5 py-1 text-center">{day.saida1}</td>
-              <td className="border border-stone-800/70 px-1.5 py-1 text-center">{day.entrada2}</td>
-              <td className="border border-stone-800/70 px-1.5 py-1 text-center">{day.saida2}</td>
+              <td className="border border-stone-800/70 px-1.5 py-1 text-center">
+                <PunchCell value={day.saida1} coord={day.saida1Coord} />
+              </td>
+              <td className="border border-stone-800/70 px-1.5 py-1 text-center">
+                <PunchCell value={day.entrada2} coord={day.entrada2Coord} />
+              </td>
+              <td className="border border-stone-800/70 px-1.5 py-1 text-center">
+                <PunchCell value={day.saida2} coord={day.saida2Coord} />
+              </td>
               <td className="border border-stone-800/70 px-1.5 py-1" />
               <td className="border border-stone-800/70 px-1.5 py-1" />
             </tr>

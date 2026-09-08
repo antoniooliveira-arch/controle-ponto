@@ -599,7 +599,9 @@ async function getMonthlyReport(input) {
   const records = await db.select({
     businessDate: timeRecords.businessDate,
     type: timeRecords.type,
-    recordedAt: timeRecords.recordedAt
+    recordedAt: timeRecords.recordedAt,
+    latitude: timeRecords.latitude,
+    longitude: timeRecords.longitude
   }).from(timeRecords).where(
     and(
       eq(timeRecords.employeeId, input.employeeId),
@@ -611,7 +613,7 @@ async function getMonthlyReport(input) {
   const dayRecords = {};
   records.forEach((record) => {
     const day = Number(record.businessDate.slice(8, 10));
-    dayRecords[day] = [...dayRecords[day] ?? [], { type: record.type, recordedAt: record.recordedAt }];
+    dayRecords[day] = [...dayRecords[day] ?? [], { type: record.type, recordedAt: record.recordedAt, latitude: record.latitude, longitude: record.longitude }];
   });
   return {
     employee: toReportEmployeeView(employeeRow.employee, employeeRow.sectorName),

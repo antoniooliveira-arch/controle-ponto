@@ -15,7 +15,7 @@ export const MONTHS = [
 
 export const WEEKDAYS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"] as const;
 
-export type PointRecord = { type: string; recordedAt: Date };
+export type PointRecord = { type: string; recordedAt: Date; latitude?: number | null; longitude?: number | null };
 
 export type DayRow = {
   day: number;
@@ -24,6 +24,10 @@ export type DayRow = {
   saida1: string;
   entrada2: string;
   saida2: string;
+  entrada1Coord: string | null;
+  saida1Coord: string | null;
+  entrada2Coord: string | null;
+  saida2Coord: string | null;
   isHoliday: boolean;
   holidayDescription: string;
   marked: boolean;
@@ -55,6 +59,14 @@ export function formatReportHour(value: Date | string | null | undefined): strin
   }).format(new Date(value));
 }
 
+export function recordCoordinates<T extends { type: string; latitude?: number | null; longitude?: number | null }>(records: T[], type: string): string | null {
+  const record = records.find(item => item.type === type);
+  if (record && record.latitude != null && record.longitude != null) {
+    return `${record.latitude.toFixed(6)}, ${record.longitude.toFixed(6)}`;
+  }
+  return null;
+}
+
 export type HolidayEntry = { date: string; description?: string | null };
 
 export function buildDayRows(
@@ -75,6 +87,7 @@ export function buildDayRows(
     const isHoliday = weekend || Boolean(holidayDesc);
     const records = byDay.get(day) ?? [];
     const time = (type: string) => formatReportHour(records.find(r => r.type === type)?.recordedAt);
+    const coords = (type: string) => recordCoordinates(records, type);
     rows.push({
       day,
       weekday: weekdayName(year, month, day),
@@ -82,6 +95,10 @@ export function buildDayRows(
       saida1: time("SAIDA_INTERVALO"),
       entrada2: time("RETORNO_INTERVALO"),
       saida2: time("SAIDA_FINAL"),
+      entrada1Coord: coords("ENTRADA"),
+      saida1Coord: coords("SAIDA_INTERVALO"),
+      entrada2Coord: coords("RETORNO_INTERVALO"),
+      saida2Coord: coords("SAIDA_FINAL"),
       isHoliday,
       holidayDescription: holidayDesc ?? (weekend ? "Fim de semana" : ""),
       marked: Boolean(holidayDesc),

@@ -24,6 +24,12 @@ const TABLE_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
 const COLUMN_WIDTHS = [15, 16, 22, 52, 22, 22, 22, 52, 48];
 const COLUMN_TITLES = ["DIA", "SEM", "ENTRADA", "ASSINATURA", "SAÍDA", "ENTRADA", "SAÍDA", "ASSINATURA", "RESP/DIRETO"];
+const COORDINATE_COLUMNS: Record<number, "entrada1Coord" | "saida1Coord" | "entrada2Coord" | "saida2Coord"> = {
+  2: "entrada1Coord",
+  4: "saida1Coord",
+  5: "entrada2Coord",
+  6: "saida2Coord",
+};
 
 function drawLabeledValue(
   doc: jsPDF,
@@ -152,6 +158,10 @@ export function generateReportPdf(data: ReportPdfData): jsPDF {
     didParseCell: data => {
       if (data.section !== "body") return;
       const day = days[data.row.index];
+      const coordinateKey = COORDINATE_COLUMNS[data.column.index];
+      if (coordinateKey && day?.[coordinateKey]) {
+        data.cell.styles.minCellHeight = 9.5;
+      }
       if (!day?.isHoliday) return;
       if (data.column.index === 0) {
         data.cell.text = [`${String(day.day).padStart(2, "0")}*`];
@@ -165,6 +175,17 @@ export function generateReportPdf(data: ReportPdfData): jsPDF {
         data.cell.styles.fontSize = 6.4;
         data.cell.styles.textColor = [130, 130, 120];
       }
+    },
+    didDrawCell: data => {
+      if (data.section !== "body") return;
+      const day = days[data.row.index];
+      const coordinateKey = COORDINATE_COLUMNS[data.column.index];
+      const coordinate = coordinateKey ? day?.[coordinateKey] : null;
+      if (!coordinate) return;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(5);
+      doc.setTextColor(muted[0], muted[1], muted[2]);
+      doc.text(coordinate, data.cell.x + data.cell.width / 2, data.cell.y + data.cell.height - 1.5, { align: "center" });
     },
   });
 
