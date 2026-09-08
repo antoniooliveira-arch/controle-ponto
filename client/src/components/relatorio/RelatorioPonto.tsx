@@ -1,4 +1,6 @@
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Eye, FileDown, Loader2, Printer } from "lucide-react";
 import { buildDayRows, daysInMonth, reportFileName, type DayRow } from "@/lib/report";
 import { trpc } from "@/lib/trpc";
@@ -21,6 +23,20 @@ function printReport(doc: import("jspdf").jsPDF) {
   const targetUrl = typeof url === "string" ? url : url.href;
   window.open(targetUrl, "_blank");
   toast.info("Abrindo o relatório para impressão…");
+}
+
+function CampoAuto({ label, value, placeholder }: { label: string; value: string; placeholder?: string }) {
+  return (
+    <div className="space-y-2">
+      <Label className="tiny-label">{label}</Label>
+      <Input
+        value={value}
+        readOnly
+        placeholder={placeholder ?? "—"}
+        className="admin-input bg-white/60 text-sm"
+      />
+    </div>
+  );
 }
 
 export function RelatorioPonto() {
@@ -158,50 +174,54 @@ export function RelatorioPonto() {
         </div>
       </div>
 
-      <div className="report-filter mt-10">
-        <div className="min-w-[260px] flex-1">
-          <SelecaoCooperado
-            cooperados={(employees.data ?? []).map(employee => ({
-              id: employee.id,
-              fullName: employee.fullName,
-              registration: employee.registration,
-            }))}
-            value={cooperado}
-            onChange={value => {
-              setCooperado(value);
-              setPreviewRequest(false);
-            }}
+      <form
+        className="mt-10 border border-stone-900/15 bg-[#f8f3e9] p-5"
+        onSubmit={event => event.preventDefault()}
+      >
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="tiny-label">Dados para emissão</p>
+          <p className="text-[11px] text-stone-500">Campos de matrícula, função, cargo e lotação são preenchidos automaticamente.</p>
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <SelecaoCooperado
+              cooperados={(employees.data ?? []).map(employee => ({
+                id: employee.id,
+                fullName: employee.fullName,
+                registration: employee.registration,
+              }))}
+              value={cooperado}
+              onChange={value => {
+                setCooperado(value);
+                setPreviewRequest(false);
+              }}
+            />
+          </div>
+          <CampoAuto
+            label="MATRÍCULA — NÚMERO DO SERVIDOR"
+            value={selectedEmployee?.registration ?? ""}
+            placeholder="Selecione o cooperado"
           />
-        </div>
-        <div className="min-w-[300px] flex-1">
-          <SeletorMes
-            month={month}
-            year={year}
-            onChange={(nextMonth, nextYear) => {
-              setMonth(nextMonth);
-              setYear(nextYear);
-              setPreviewRequest(false);
-            }}
+          <CampoAuto label="FUNÇÃO" value={selectedEmployee?.funcao ?? ""} placeholder="Selecione o cooperado" />
+          <CampoAuto label="CARGO" value={selectedEmployee?.cargo ?? ""} placeholder="Selecione o cooperado" />
+          <CampoAuto
+            label="LOTAÇÃO / LOCAL"
+            value={selectedEmployee?.lotacaoLocal ?? selectedEmployee?.sectorName ?? ""}
+            placeholder="Selecione o cooperado"
           />
+          <div className="space-y-2">
+            <SeletorMes
+              month={month}
+              year={year}
+              onChange={(nextMonth, nextYear) => {
+                setMonth(nextMonth);
+                setYear(nextYear);
+                setPreviewRequest(false);
+              }}
+            />
+          </div>
         </div>
-      </div>
-
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <div className="paper-card p-4">
-          <p className="tiny-label">Cooperado</p>
-          <p className="mt-2 font-serif text-lg">{selectedEmployee?.fullName ?? "—"}</p>
-        </div>
-        <div className="paper-card p-4">
-          <p className="tiny-label">Matrícula</p>
-          <p className="mt-2 font-serif text-lg">{selectedEmployee?.registration ?? "—"}</p>
-        </div>
-        <div className="paper-card p-4">
-          <p className="tiny-label">Lotação / local</p>
-          <p className="mt-2 font-serif text-lg">
-            {selectedEmployee?.lotacaoLocal ?? selectedEmployee?.sectorName ?? "—"}
-          </p>
-        </div>
-      </div>
+      </form>
 
       <div className="mt-6">
         <GestaoFeriados />
