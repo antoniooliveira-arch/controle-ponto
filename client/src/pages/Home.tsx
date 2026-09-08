@@ -48,7 +48,7 @@ function LoginScreen() {
   };
 
   return (
-    <main className="login-shell flex min-h-screen flex-col px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-6">
+    <main className="login-shell flex min-h-screen flex-col px-4 py-3 sm:px-6 sm:py-4 lg:px-8 lg:py-5">
       <div className="login-frame flex flex-1 flex-col">
         <header className="flex items-center justify-between py-2">
           <div className="flex items-center gap-3">
@@ -62,13 +62,13 @@ function LoginScreen() {
           </Button>
         </header>
 
-        <section className="grid flex-1 items-center py-8">
-          <div className="mx-auto w-full max-w-md rounded-3xl border border-[#e5e7e0] bg-white p-7 shadow-[0_24px_48px_-28px_rgba(22,50,36,0.4)] sm:p-9">
+        <section className="grid flex-1 items-center py-2 lg:py-4">
+          <div className="mx-auto w-full max-w-md rounded-3xl border border-[#e5e7e0] bg-white p-6 shadow-[0_24px_48px_-28px_rgba(22,50,36,0.4)] sm:p-7">
             <p className="login-label text-[#2e7d4e]">Acesso do servidor</p>
-            <h2 className="mt-3 font-serif text-4xl font-bold tracking-tight text-[#163224]">Identificação</h2>
-            <p className="mt-3 text-sm leading-relaxed text-stone-500">Faça login para registrar sua jornada de trabalho.</p>
+            <h2 className="mt-2 font-serif text-4xl font-bold tracking-tight text-[#163224]">Identificação</h2>
+            <p className="mt-2 text-sm leading-relaxed text-stone-500">Faça login para registrar sua jornada de trabalho.</p>
 
-            <form onSubmit={submit} className="mt-8 space-y-5">
+            <form onSubmit={submit} className="mt-5 space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="employee" className="login-label">Servidor</Label>
                 <select id="employee" value={employeeId} onChange={event => setEmployeeId(event.target.value)} disabled={employees.isLoading || login.isPending} className="login-input">
@@ -90,29 +90,29 @@ function LoginScreen() {
               </Button>
             </form>
 
-            <div className="mt-5 text-center">
+            <div className="mt-4 text-center">
               <Button type="button" variant="link" onClick={() => toast.info("Para redefinir sua senha, procure o administrador responsável pelo cadastro.")} className="h-auto p-0 text-xs font-semibold text-[#2e7d4e] underline-offset-4 hover:text-[#1d4a2f]">Esqueceu sua senha?</Button>
             </div>
 
-            <div className="mt-6 border-t border-[#eef0ea] pt-4">
+            <div className="mt-4 border-t border-[#eef0ea] pt-3">
               <button type="button" onClick={() => { navigator.clipboard.writeText(window.location.origin); toast.success("Link do aplicativo copiado."); }} className="flex w-full items-center gap-3 text-left transition-opacity hover:opacity-80">
-                <QRCodeSVG value={window.location.origin} size={72} fgColor="#1d4a2f" bgColor="transparent" className="shrink-0 rounded-lg border border-[#e5e7e0] p-1" />
+                <QRCodeSVG value={window.location.origin} size={56} fgColor="#1d4a2f" bgColor="transparent" className="shrink-0 rounded-lg border border-[#e5e7e0] p-1" />
                 <span className="min-w-0">
                   <span className="block text-sm font-bold text-[#1d4a2f]">Acessar no celular</span>
                   <span className="mt-1 block text-xs leading-relaxed text-stone-500">Escaneie o QR Code ou toque para copiar o link e abrir o aplicativo rapidamente.</span>
                 </span>
               </button>
-              <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-[#e5e7e0] px-3 py-2">
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-[#e5e7e0] px-3 py-1.5">
                 <span className="min-w-0"><span className="block text-[11px] font-bold uppercase tracking-[0.13em] text-[#2e7d4e]">Link curto</span><a href="https://spoo.me/RalbeqE" target="_blank" rel="noreferrer" className="block truncate text-sm text-[#1d4a2f] hover:underline">spoo.me/RalbeqE</a></span>
                 <Button type="button" variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText("https://spoo.me/RalbeqE"); toast.success("Link curto copiado."); }} className="shrink-0 text-xs font-semibold text-[#2e7d4e]">Copiar</Button>
               </div>
             </div>
 
-            {employees.isError ? <div className="mt-6 border-t border-[#eef0ea] pt-4"><p className="text-sm leading-relaxed text-stone-600">Não foi possível carregar a lista de servidores.</p><Button type="button" variant="link" onClick={() => employees.refetch()} className="mt-1 h-auto p-0 text-xs font-semibold text-[#2e7d4e]">Tentar novamente</Button></div> : !employees.isLoading && !employees.data?.length ? <p className="mt-6 border-t border-[#eef0ea] pt-4 text-sm leading-relaxed text-stone-600">Ainda não há servidores ativos. Solicite ao administrador o seu cadastro.</p> : <p className="mt-6 border-t border-[#eef0ea] pt-4 text-xs leading-relaxed text-stone-500">Sua senha é processada de forma protegida. O sistema não armazena senhas em texto aberto.</p>}
+            {employees.isError ? <div className="mt-4 border-t border-[#eef0ea] pt-3"><p className="text-sm leading-relaxed text-stone-600">Não foi possível carregar a lista de servidores.</p><Button type="button" variant="link" onClick={() => employees.refetch()} className="mt-1 h-auto p-0 text-xs font-semibold text-[#2e7d4e]">Tentar novamente</Button></div> : !employees.isLoading && !employees.data?.length ? <p className="mt-4 border-t border-[#eef0ea] pt-3 text-sm leading-relaxed text-stone-600">Ainda não há servidores ativos. Solicite ao administrador o seu cadastro.</p> : <p className="mt-4 border-t border-[#eef0ea] pt-3 text-xs leading-relaxed text-stone-500">Sua senha é processada de forma protegida. O sistema não armazena senhas em texto aberto.</p>}
           </div>
         </section>
 
-        <footer className="flex justify-center border-t border-[#e5e7e0] py-5">
+        <footer className="flex justify-center border-t border-[#e5e7e0] py-3">
           <span className="font-bold text-stone-900" style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 11 }}>Desenvolvido Pelo Departamento de Tecnologia da SME.</span>
         </footer>
       </div>
