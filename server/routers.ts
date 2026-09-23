@@ -8,6 +8,7 @@ import {
   createEmployee,
   createSector,
   getAdminDashboard,
+  getAdminEmployeeDay,
   getAttendanceReport,
   getEmployeeSession,
   getEmployeeToday,
@@ -25,10 +26,12 @@ import {
   resetEmployeePassword,
   revokeEmployeeSession,
   revokeUserSession,
+  saveEmployeeDayAdjustments,
   updateSector,
   updateEmployee,
 } from "./db";
 import { getSessionCookieOptions, ADMIN_SESSION_COOKIE, ADMIN_SESSION_LIFETIME_MS } from "./_core/cookies";
+import { timeRecordType } from "../drizzle/schema";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, publicProcedure, router } from "./_core/trpc";
 
@@ -137,6 +140,16 @@ export const appRouter = router({
   }),
   admin: router({
     dashboard: adminProcedure.input(z.object({ businessDate: dateSchema.optional() })).query(({ input }) => getAdminDashboard(input.businessDate)),
+    dayDetail: adminProcedure.input(z.object({ employeeId: z.number().int().positive(), businessDate: dateSchema })).query(({ input }) => getAdminEmployeeDay(input.employeeId, input.businessDate)),
+    saveDayAdjustments: adminProcedure.input(z.object({
+      employeeId: z.number().int().positive(),
+      businessDate: dateSchema,
+      records: z.array(z.object({
+        type: z.enum(timeRecordType),
+        recordId: z.number().int().positive().nullable().optional(),
+        recordedAt: z.string().min(1),
+      })).max(4),
+    })).mutation(({ input }) => saveEmployeeDayAdjustments(input)),
     employees: adminProcedure.query(() => listEmployees()),
     sectors: adminProcedure.query(() => listSectors()),
     createSector: adminProcedure.input(z.object({ name: z.string().trim().min(2).max(120) })).mutation(({ input }) => createSector(input.name)),

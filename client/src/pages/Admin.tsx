@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { businessDateNow, formatDate, formatDuration, formatTime, recordCoordinates, recordTime } from "@/lib/attendance";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, BarChart3, Check, CircleAlert, Clock3, Eye, EyeOff, FileBarChart, FileDown, FileText, History, Loader2, LockKeyhole, LogOut, Plus, RefreshCw, Settings2, ShieldCheck, UserCog, Users, X } from "lucide-react";
+import { ArrowLeft, BarChart3, Check, CircleAlert, Clock3, Eye, EyeOff, FileBarChart, FileDown, FileText, History, Loader2, LockKeyhole, LogOut, PenLine, Plus, RefreshCw, Settings2, ShieldCheck, UserCog, Users, X } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -13,8 +13,9 @@ import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { HistoricoRelatorios } from "@/components/relatorio/HistoricoRelatorios";
 import { RelatorioPonto } from "@/components/relatorio/RelatorioPonto";
+import { AjustesPonto } from "@/components/ajustes/AjustesPonto";
 
-type Tab = "overview" | "people" | "reports" | "folha" | "historico";
+type Tab = "overview" | "people" | "reports" | "folha" | "ajustes" | "historico";
 type EmployeeItem = { id: number; fullName: string; registration: string; sectorId: number | null; sectorName: string | null; funcao: string | null; cargo: string | null; lotacaoLocal: string | null; cargaHoraria: string | null; active: boolean };
 
 const statusStyle = {
@@ -33,6 +34,7 @@ function AdminHeader({ tab, setTab }: { tab: Tab; setTab: (tab: Tab) => void }) 
     { id: "people", label: "Servidores", icon: Users },
     { id: "reports", label: "Relatórios", icon: FileBarChart },
     { id: "folha", label: "Relatório de Ponto", icon: FileText },
+    { id: "ajustes", label: "Ajustes", icon: PenLine },
     { id: "historico", label: "Emissões", icon: History },
   ];
   return <header className="admin-header"><div className="flex min-w-0 items-center gap-4"><button onClick={() => setLocation("/")} className="grid h-9 w-9 shrink-0 place-items-center border border-stone-900/30 text-stone-900 transition-colors hover:bg-stone-900 hover:text-white" aria-label="Voltar ao ponto"><ArrowLeft className="h-4 w-4" /></button><div className="min-w-0"><p className="tiny-label">Administração</p><h1 className="truncate font-serif text-2xl font-semibold">Controle de ponto</h1></div></div><nav className="order-3 flex w-full gap-1 border-t border-stone-900/10 pt-3 lg:order-none lg:w-auto lg:border-0 lg:pt-0">{items.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={`admin-nav-item ${tab === item.id ? "admin-nav-item-active" : ""}`}><item.icon className="h-3.5 w-3.5" /><span>{item.label}</span></button>)}</nav><div className="ml-auto flex items-center gap-3"><div className="hidden text-right sm:block"><p className="text-sm font-medium">{user?.name ?? "Administrador"}</p><p className="tiny-label mt-1">Acesso administrativo</p></div><Button variant="ghost" size="icon" onClick={() => setPasswordOpen(true)} title="Redefinir minha senha"><LockKeyhole className="h-4 w-4" /></Button><Button variant="ghost" size="icon" onClick={logout} title="Sair da administração"><LogOut className="h-4 w-4" /></Button></div><ChangePasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} /></header>;
@@ -173,7 +175,7 @@ function Reports() {
 
 function Workspace() {
   const [tab, setTab] = useState<Tab>("overview");
-  return <main className="admin-shell min-h-screen"><AdminHeader tab={tab} setTab={setTab} />{tab === "overview" ? <Overview /> : tab === "people" ? <People /> : tab === "reports" ? <Reports /> : tab === "folha" ? <RelatorioPonto /> : <HistoricoRelatorios />}</main>;
+  return <main className="admin-shell min-h-screen"><AdminHeader tab={tab} setTab={setTab} />{tab === "overview" ? <Overview /> : tab === "people" ? <People /> : tab === "reports" ? <Reports /> : tab === "folha" ? <RelatorioPonto /> : tab === "ajustes" ? <AjustesPonto /> : <HistoricoRelatorios />}</main>;
 }
 
 export default function Admin() {

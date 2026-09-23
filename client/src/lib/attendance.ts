@@ -48,6 +48,27 @@ export function formatDate(value: Date | string): string {
   }).format(new Date(value));
 }
 
+export const BUSINESS_TIME_ZONE = "America/Cuiaba";
+
+export function formatTimeOnly(value: Date | string | null | undefined): string {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("en-GB", { timeZone: BUSINESS_TIME_ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value));
+}
+
+export function zonedTimeToUtc(businessDate: string, time: string, timeZone = BUSINESS_TIME_ZONE): Date {
+  const [year, month, day] = businessDate.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  const target = Date.UTC(year, month - 1, day, hour, minute);
+  let result = target;
+  for (let i = 0; i < 3; i++) {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(result));
+    const pick = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find(part => part.type === type)?.value ?? "0");
+    const shownAsUtc = Date.UTC(pick("year"), pick("month") - 1, pick("day"), pick("hour"), pick("minute"), pick("second"));
+    result = target - (shownAsUtc - result);
+  }
+  return new Date(result);
+}
+
 export function businessDateNow(): string {
   const pieces = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Cuiaba",

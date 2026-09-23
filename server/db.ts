@@ -13,7 +13,7 @@ import {
   users,
   workdays,
 } from "../drizzle/schema";
-import { calculateAttendance, getBusinessDate, getNextPunchType } from "./attendance";
+import { calculateAttendance, getBusinessDate, getNextPunchType, type PunchType } from "./attendance";
 import { ENV } from "./_core/env";
 import { generateSessionToken, hashPassword, hashSessionToken, nextFailedLoginState, verifyPassword } from "./security";
 
@@ -293,6 +293,77 @@ export async function registerEmployeePunch(employeeId: number, location: { lati
 
     const records = [...existing, { type: expected, recordedAt: now }];
     return { businessDate, recordedType: expected, records, summary: calculateAttendance(records, now) };
+  });
+}
+
+export async function getAdminEmployeeDay(employeeId: number, businessDate: string) {
+  const db = await requireDb();
+  const employee = (await db.select().from(employees).where(eq(employees.id, employeeId)).limit(1))[0];
+  if (!employee) throw new Error("Servidor não encontrado.");
+  const workday = (await db.select().from(workdays).where(and(eq(workdays.employeeId, employeeId), eq(workdays.businessDate, businessDate))).limit(1))[0];
+  const records = workday ? await db.select().from(timeRecords).where(eq(timeRecords.workdayId, workday.id)).orderBy(asc(timeRecords.recordedAt)) : [];
+  return { employeeId, businessDate, workday: workday ?? null, records };
+}
+
+export async function saveEmployeeDayAdjustments(input: {
+  employeeId: number;
+  businessDate: string;
+  records: { type: PunchType; recordId?: number | null; recordedAt: string }[];
+}) {
+  const db = await requireDb();
+  const now = new Date();
+
+  const types = input.records.map(record => record.type);
+  if (new Set(types).size !== types.length) throw new Error("Não é permitido registrar a mesma batida mais de uma vez.");
+  const referencedIds = input.records.map(record => record.recordId).filter((id): id is number => Boolean(id));
+  if (new Set(referencedIds).size !== referencedIds.length) throw new Error("As referências das batidas são inválidas.");
+
+  return db.transaction(async tx => {
+    await tx
+      .insert(workdays)
+      .values({ employeeId: input.employeeId, businessDate: input.businessDate, status: "OPEN" })
+      .onConflictDoUpdate({ target: [workdays.employeeId, workdays.businessDate], set: { updatedAt: now } });
+
+    const workday = (await tx.select().from(workdays).where(and(eq(workdays.employeeId, input.employeeId), eq(workdays.businessDate, input.businessDate))).limit(1))[0];
+    if (!workday) throw new Error("Não foi possível localizar a jornada.");
+
+    const existing = await tx.select().from(timeRecords).where(eq(timeRecords.workdayId, workday.id));
+
+    const desired = new Map<PunchType, { recordId?: number | null; recordedAt: Date }>();
+    for (const record of input.records) {
+      desired.set(record.type, { recordId: record.recordId, recordedAt: new Date(record.recordedAt) });
+    }
+
+    for (const record of existing) {
+      if (!desired.has(record.type)) {
+        await tx.delete(timeRecords).where(eq(timeRecords.id, record.id));
+      }
+    }
+
+    for (const [type, value] of Array.from(desired.entries())) {
+      const current = existing.find(record => record.type === type);
+      if (value.recordId != null && current && value.recordId !== current.id) {
+        throw new Error("A batida informada não pertence à jornada deste servidor.");
+      }
+      if (current) {
+        await tx.update(timeRecords).set({ recordedAt: value.recordedAt }).where(eq(timeRecords.id, current.id));
+      } else {
+        await tx.insert(timeRecords).values({
+          workdayId: workday.id,
+          employeeId: input.employeeId,
+          businessDate: input.businessDate,
+          type,
+          recordedAt: value.recordedAt,
+          latitude: null,
+          longitude: null,
+        });
+      }
+    }
+
+    const hasFinal = desired.has("SAIDA_FINAL");
+    await tx.update(workdays).set({ status: hasFinal ? "COMPLETE" : "OPEN", updatedAt: now }).where(eq(workdays.id, workday.id));
+
+    return { success: true, businessDate: input.businessDate };
   });
 }
 
