@@ -1,3 +1,5 @@
+CREATE TYPE "public"."punch_audit_action" AS ENUM('INSERT', 'UPDATE', 'DELETE');
+--> statement-breakpoint
 CREATE TABLE "punch_audit_log" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"employeeId" integer,
