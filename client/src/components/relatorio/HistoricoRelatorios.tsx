@@ -34,7 +34,7 @@ export function HistoricoRelatorios() {
           funcao: report.employee.funcao,
           cargo: report.employee.cargo,
           lotacaoLocal: report.employee.lotacaoLocal,
-          cargaHoraria: report.employee.cargaHoraria,
+          cargaHorariaSemanal: report.employee.cargaHorariaSemanal,
         },
         month: report.month,
         year: report.year,

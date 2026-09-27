@@ -1,11 +1,13 @@
 import { and, asc, desc, eq, gte, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { cargaSegundosDiarios, normaliseCargaSemanal } from "@shared/carga";
 import {
   employees,
   employeeSessions,
   holidays,
   InsertUser,
+  punchAuditLog,
   reportLogs,
   sectors,
   timeRecords,
@@ -14,6 +16,7 @@ import {
   workdays,
 } from "../drizzle/schema";
 import { calculateAttendance, getBusinessDate, getNextPunchType, type PunchType } from "./attendance";
+import { buildPunchAuditEntries, normaliseAuditReason } from "./audit";
 import { ENV } from "./_core/env";
 import { generateSessionToken, hashPassword, hashSessionToken, nextFailedLoginState, verifyPassword } from "./security";
 
@@ -143,7 +146,7 @@ function toEmployeeView(employee: typeof employees.$inferSelect, sectorName: str
     funcao: employee.funcao,
     cargo: employee.cargo,
     lotacaoLocal: employee.lotacaoLocal,
-    cargaHoraria: employee.cargaHoraria,
+    cargaHorariaSemanal: employee.cargaHorariaSemanal,
     active: employee.active,
     lockedUntil: employee.lockedUntil,
     createdAt: employee.createdAt,
@@ -160,7 +163,7 @@ export function toReportEmployeeView(employee: typeof employees.$inferSelect, se
     funcao: employee.funcao ?? "",
     cargo: employee.cargo ?? "",
     lotacaoLocal: employee.lotacaoLocal ?? sectorName ?? "",
-    cargaHoraria: employee.cargaHoraria ?? "8h",
+    cargaHorariaSemanal: normaliseCargaSemanal(employee.cargaHorariaSemanal),
   };
 }
 
@@ -232,12 +235,20 @@ export async function revokeEmployeeSession(token: string | null) {
 export async function getEmployeeToday(employeeId: number) {
   const db = await requireDb();
   const businessDate = getBusinessDate();
-  const records = await db
-    .select({ id: timeRecords.id, type: timeRecords.type, recordedAt: timeRecords.recordedAt, latitude: timeRecords.latitude, longitude: timeRecords.longitude })
-    .from(timeRecords)
-    .where(and(eq(timeRecords.employeeId, employeeId), eq(timeRecords.businessDate, businessDate)))
-    .orderBy(asc(timeRecords.recordedAt));
-  return { businessDate, records, summary: calculateAttendance(records) };
+  const [employee, records] = await Promise.all([
+    db
+      .select({ cargaHorariaSemanal: employees.cargaHorariaSemanal })
+      .from(employees)
+      .where(eq(employees.id, employeeId))
+      .limit(1),
+    db
+      .select({ id: timeRecords.id, type: timeRecords.type, recordedAt: timeRecords.recordedAt, latitude: timeRecords.latitude, longitude: timeRecords.longitude })
+      .from(timeRecords)
+      .where(and(eq(timeRecords.employeeId, employeeId), eq(timeRecords.businessDate, businessDate)))
+      .orderBy(asc(timeRecords.recordedAt)),
+  ]);
+  const expectedSeconds = cargaSegundosDiarios(employee[0]?.cargaHorariaSemanal, businessDate);
+  return { businessDate, records, summary: calculateAttendance(records, new Date(), true, expectedSeconds) };
 }
 
 export async function registerEmployeePunch(employeeId: number, location: { latitude: number; longitude: number }) {
@@ -254,6 +265,15 @@ export async function registerEmployeePunch(employeeId: number, location: { lati
   }
 
   return db.transaction(async tx => {
+    const employee = (
+      await tx
+        .select({ cargaHorariaSemanal: employees.cargaHorariaSemanal })
+        .from(employees)
+        .where(eq(employees.id, employeeId))
+        .limit(1)
+    )[0];
+    const expectedSeconds = cargaSegundosDiarios(employee?.cargaHorariaSemanal, businessDate);
+
     await tx
       .insert(workdays)
       .values({ employeeId, businessDate, status: "OPEN" })
@@ -292,7 +312,12 @@ export async function registerEmployeePunch(employeeId: number, location: { lati
     }
 
     const records = [...existing, { type: expected, recordedAt: now }];
-    return { businessDate, recordedType: expected, records, summary: calculateAttendance(records, now) };
+    return {
+      businessDate,
+      recordedType: expected,
+      records,
+      summary: calculateAttendance(records, now, true, expectedSeconds),
+    };
   });
 }
 
@@ -309,6 +334,9 @@ export async function saveEmployeeDayAdjustments(input: {
   employeeId: number;
   businessDate: string;
   records: { type: PunchType; recordId?: number | null; recordedAt: string }[];
+  reason: string;
+  notes?: string | null;
+  admin: { id: number; name: string };
 }) {
   const db = await requireDb();
   const now = new Date();
@@ -317,8 +345,18 @@ export async function saveEmployeeDayAdjustments(input: {
   if (new Set(types).size !== types.length) throw new Error("Não é permitido registrar a mesma batida mais de uma vez.");
   const referencedIds = input.records.map(record => record.recordId).filter((id): id is number => Boolean(id));
   if (new Set(referencedIds).size !== referencedIds.length) throw new Error("As referências das batidas são inválidas.");
+  const audited = normaliseAuditReason(input.reason, input.notes);
 
   return db.transaction(async tx => {
+    const employee = (
+      await tx
+        .select({ fullName: employees.fullName, registration: employees.registration })
+        .from(employees)
+        .where(eq(employees.id, input.employeeId))
+        .limit(1)
+    )[0];
+    if (!employee) throw new Error("Servidor não encontrado.");
+
     await tx
       .insert(workdays)
       .values({ employeeId: input.employeeId, businessDate: input.businessDate, status: "OPEN" })
@@ -334,6 +372,29 @@ export async function saveEmployeeDayAdjustments(input: {
       desired.set(record.type, { recordId: record.recordId, recordedAt: new Date(record.recordedAt) });
     }
 
+    for (const [type, value] of Array.from(desired.entries())) {
+      const current = existing.find(record => record.type === type);
+      if (value.recordId != null && current && value.recordId !== current.id) {
+        throw new Error("A batida informada não pertence à jornada deste servidor.");
+      }
+    }
+
+    const auditEntries = buildPunchAuditEntries({
+      employeeId: input.employeeId,
+      employeeName: employee.fullName,
+      registration: employee.registration,
+      workdayId: workday.id,
+      businessDate: input.businessDate,
+      existing: existing.map(record => ({ type: record.type, recordedAt: record.recordedAt })),
+      desired: new Map(Array.from(desired.entries()).map(([type, value]) => [type, value.recordedAt])),
+      reason: audited.reason,
+      notes: audited.notes,
+      adjustedById: input.admin.id,
+      adjustedBy: input.admin.name,
+      at: now,
+    });
+    if (auditEntries.length) await tx.insert(punchAuditLog).values(auditEntries);
+
     for (const record of existing) {
       if (!desired.has(record.type)) {
         await tx.delete(timeRecords).where(eq(timeRecords.id, record.id));
@@ -342,10 +403,8 @@ export async function saveEmployeeDayAdjustments(input: {
 
     for (const [type, value] of Array.from(desired.entries())) {
       const current = existing.find(record => record.type === type);
-      if (value.recordId != null && current && value.recordId !== current.id) {
-        throw new Error("A batida informada não pertence à jornada deste servidor.");
-      }
       if (current) {
+        if (current.recordedAt.getTime() === value.recordedAt.getTime()) continue;
         await tx.update(timeRecords).set({ recordedAt: value.recordedAt }).where(eq(timeRecords.id, current.id));
       } else {
         await tx.insert(timeRecords).values({
@@ -363,8 +422,42 @@ export async function saveEmployeeDayAdjustments(input: {
     const hasFinal = desired.has("SAIDA_FINAL");
     await tx.update(workdays).set({ status: hasFinal ? "COMPLETE" : "OPEN", updatedAt: now }).where(eq(workdays.id, workday.id));
 
-    return { success: true, businessDate: input.businessDate };
+    return { success: true, businessDate: input.businessDate, auditEntries: auditEntries.length };
   });
+}
+
+export async function listPunchAudit(input: {
+  employeeId?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  limit?: number | null;
+}) {
+  const db = await requireDb();
+  const conditions = [];
+  if (input.employeeId) conditions.push(eq(punchAuditLog.employeeId, input.employeeId));
+  if (input.startDate) conditions.push(gte(punchAuditLog.businessDate, input.startDate));
+  if (input.endDate) conditions.push(lte(punchAuditLog.businessDate, input.endDate));
+  const limit = Math.min(Math.max(input.limit ?? 100, 1), 200);
+  return db
+    .select({
+      id: punchAuditLog.id,
+      employeeId: punchAuditLog.employeeId,
+      employeeName: punchAuditLog.employeeName,
+      registration: punchAuditLog.registration,
+      businessDate: punchAuditLog.businessDate,
+      action: punchAuditLog.action,
+      punchType: punchAuditLog.punchType,
+      previousRecordedAt: punchAuditLog.previousRecordedAt,
+      newRecordedAt: punchAuditLog.newRecordedAt,
+      reason: punchAuditLog.reason,
+      notes: punchAuditLog.notes,
+      adjustedBy: punchAuditLog.adjustedBy,
+      createdAt: punchAuditLog.createdAt,
+    })
+    .from(punchAuditLog)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(punchAuditLog.createdAt), desc(punchAuditLog.id))
+    .limit(limit);
 }
 
 export async function listSectors() {
@@ -401,7 +494,7 @@ export async function createEmployee(input: {
   funcao?: string | null;
   cargo?: string | null;
   lotacaoLocal?: string | null;
-  cargaHoraria?: string | null;
+  cargaHorariaSemanal?: number | null;
 }) {
   const db = await requireDb();
   const passwordHash = await hashPassword(input.password);
@@ -412,7 +505,7 @@ export async function createEmployee(input: {
     funcao: input.funcao?.trim() || null,
     cargo: input.cargo?.trim() || null,
     lotacaoLocal: input.lotacaoLocal?.trim() || null,
-    cargaHoraria: input.cargaHoraria?.trim() || null,
+    cargaHorariaSemanal: normaliseCargaSemanal(input.cargaHorariaSemanal),
     passwordHash,
   }).returning({ id: employees.id });
   return result[0].id;
@@ -428,7 +521,7 @@ export async function updateEmployee(
     funcao?: string | null;
     cargo?: string | null;
     lotacaoLocal?: string | null;
-    cargaHoraria?: string | null;
+    cargaHorariaSemanal?: number | null;
   },
 ) {
   const db = await requireDb();
@@ -441,7 +534,7 @@ export async function updateEmployee(
       funcao: input.funcao?.trim() || null,
       cargo: input.cargo?.trim() || null,
       lotacaoLocal: input.lotacaoLocal?.trim() || null,
-      cargaHoraria: input.cargaHoraria?.trim() || null,
+      cargaHorariaSemanal: normaliseCargaSemanal(input.cargaHorariaSemanal),
       active: input.active,
     })
     .where(eq(employees.id, employeeId));
@@ -487,7 +580,12 @@ export async function getAdminDashboard(businessDate = getBusinessDate()) {
     businessDate,
     rows: employeeRows.map(({ employee, sectorName }) => {
       const employeeRecords = byEmployee.get(employee.id) ?? [];
-      return { employee: toEmployeeView(employee, sectorName), records: employeeRecords, summary: calculateAttendance(employeeRecords) };
+      const expectedSeconds = cargaSegundosDiarios(employee.cargaHorariaSemanal, businessDate);
+      return {
+        employee: toEmployeeView(employee, sectorName),
+        records: employeeRecords,
+        summary: calculateAttendance(employeeRecords, new Date(), true, expectedSeconds),
+      };
     }),
   };
 }
@@ -514,11 +612,12 @@ export async function getAttendanceReport(input: { startDate: string; endDate: s
   return Array.from(grouped.entries()).map(([key, dayRecords]) => {
     const [employeeIdText, businessDate] = key.split("|");
     const employee = employeesById.get(Number(employeeIdText));
+    const expectedSeconds = cargaSegundosDiarios(employee?.cargaHorariaSemanal, businessDate);
     return {
       businessDate,
       employee: employee ? toEmployeeView(employee) : null,
       records: dayRecords,
-      summary: calculateAttendance(dayRecords, new Date(), false),
+      summary: calculateAttendance(dayRecords, new Date(), false, expectedSeconds),
     };
   });
 }
@@ -588,10 +687,25 @@ export async function getMonthlyReport(input: { employeeId: number; month: numbe
     year: input.year,
     startDate,
     endDate,
-    days: Array.from({ length: daysInMonth }, (_, index) => index + 1).map(day => ({
-      day,
-      records: dayRecords[day] ?? [],
-    })),
+    days: Array.from({ length: daysInMonth }, (_, index) => index + 1).map(day => {
+      const dayRecordsForDay = dayRecords[day] ?? [];
+      const businessDate = `${startDate.slice(0, 8)}${String(day).padStart(2, "0")}`;
+      const expectedSeconds = cargaSegundosDiarios(employeeRow.employee.cargaHorariaSemanal, businessDate);
+      return {
+        day,
+        businessDate,
+        records: dayRecordsForDay,
+        summary: calculateAttendance(
+          dayRecordsForDay.map(record => ({
+            type: record.type as PunchType,
+            recordedAt: record.recordedAt,
+          })),
+          new Date(),
+          false,
+          expectedSeconds,
+        ),
+      };
+    }),
   };
 }
 

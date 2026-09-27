@@ -1,6 +1,9 @@
+import { CargaBadge } from "@/components/CargaIndicador";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { cargaSegundosDiarios, evaluateCarga } from "@shared/carga";
 import {
   SelecaoCooperado,
   type CooperadoOpcao,
@@ -40,6 +43,8 @@ const EMPTY_TIMES: TimeMap = {
   SAIDA_FINAL: "",
 };
 
+const MOTIVO_MINIMO = 10;
+
 function isPunchType(value: string): value is PunchType {
   return PUNCH_STEPS.some(step => step.type === value);
 }
@@ -51,6 +56,8 @@ export function AjustesPonto() {
   const [cooperado, setCooperado] = useState<CooperadoOpcao | null>(null);
   const [date, setDate] = useState(today);
   const [times, setTimes] = useState<TimeMap>(EMPTY_TIMES);
+  const [reason, setReason] = useState("");
+  const [notes, setNotes] = useState("");
 
   const selectedId = cooperado?.id ?? null;
   const dayDetail = trpc.admin.dayDetail.useQuery(
@@ -76,24 +83,46 @@ export function AjustesPonto() {
   );
   const hasData = Boolean(dayDetail.data?.records.length);
 
+  const expectedSecondsForDate = useMemo(
+    () =>
+      cargaSegundosDiarios(
+        employees.data?.find(employee => employee.id === selectedId)
+          ?.cargaHorariaSemanal,
+        date
+      ),
+    [employees.data, selectedId, date]
+  );
+
   const summary = useMemo(() => {
     const values = PUNCH_STEPS.map(step => times[step.type]);
     if (values.some(value => !value)) return null;
     const [entry, intervalOut, intervalReturn, finalOut] = PUNCH_STEPS.map(
       step => zonedTimeToUtc(date, times[step.type]).getTime()
     );
+    const workedSeconds = Math.max(
+      0,
+      (intervalOut - entry + (finalOut - intervalReturn)) / 1000
+    );
     return {
-      workedSeconds: Math.max(
-        0,
-        (intervalOut - entry + (finalOut - intervalReturn)) / 1000
-      ),
+      workedSeconds,
       intervalSeconds: Math.max(0, (intervalReturn - intervalOut) / 1000),
+      carga: evaluateCarga({
+        workedSeconds,
+        expectedSeconds: expectedSecondsForDate,
+        isComplete: true,
+      }),
     };
-  }, [times, date]);
+  }, [times, date, expectedSecondsForDate]);
 
   const save = trpc.admin.saveDayAdjustments.useMutation({
-    onSuccess: async () => {
-      toast.success("Ajustes salvos para a jornada selecionada.");
+    onSuccess: async data => {
+      toast.success(
+        data.auditEntries > 0
+          ? `Ajustes salvos e registrados na auditoria (${data.auditEntries} ${data.auditEntries === 1 ? "registro" : "registros"}).`
+          : "Nenhuma alteração a registrar. Os horários já conferiam.",
+      );
+      setReason("");
+      setNotes("");
       await Promise.all([dayDetail.refetch(), utils.admin.invalidate()]);
     },
     onError: error => toast.error(error.message),
@@ -102,6 +131,12 @@ export function AjustesPonto() {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedId) return;
+    if (reason.trim().length < MOTIVO_MINIMO) {
+      toast.error(
+        `Informe a justificativa do ajuste com ao menos ${MOTIVO_MINIMO} caracteres.`
+      );
+      return;
+    }
     const records = PUNCH_STEPS.flatMap(step => {
       const time = times[step.type];
       if (!time) return [];
@@ -120,7 +155,13 @@ export function AjustesPonto() {
       toast.error("Informe ao menos um horário de batida para salvar.");
       return;
     }
-    save.mutate({ employeeId: selectedId, businessDate: date, records });
+    save.mutate({
+      employeeId: selectedId,
+      businessDate: date,
+      records,
+      reason: reason.trim(),
+      notes: notes.trim() || null,
+    });
   };
 
   return (
@@ -174,7 +215,8 @@ export function AjustesPonto() {
           <p className="tiny-label">Orientações</p>
           <p className="mt-2 text-xs leading-relaxed text-stone-500">
             Deixe o horário vazio para excluir a batida daquele tipo. Registros
-            incluídos manualmente ficam sem coordenadas de localização.
+            incluídos manualmente ficam sem coordenadas de localização. Cada
+            ajuste é registrado na auditoria com autor, data e justificativa.
           </p>
         </div>
       </div>
@@ -273,26 +315,88 @@ export function AjustesPonto() {
               );
             })}
           </div>
+          <div className="border-t border-stone-900/10 px-5 py-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="adjust-reason" className="tiny-label">
+                  Justificativa do ajuste *
+                </Label>
+                <Textarea
+                  id="adjust-reason"
+                  value={reason}
+                  onChange={event => setReason(event.target.value)}
+                  rows={3}
+                  required
+                  minLength={MOTIVO_MINIMO}
+                  placeholder="Ex.: servidor não registrou a saída no terminal por falha de rede; conferido com a chefia do setor."
+                  className="admin-input resize-y"
+                />
+                <p
+                  className={`text-[11px] ${
+                    reason.trim().length >= MOTIVO_MINIMO
+                      ? "text-stone-500"
+                      : "text-amber-800"
+                  }`}
+                >
+                  {reason.trim().length < MOTIVO_MINIMO
+                    ? `Informe ao menos ${MOTIVO_MINIMO} caracteres para registrar a auditoria.`
+                    : "Justificativa válida."}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="adjust-notes" className="tiny-label">
+                  Observação (opcional)
+                </Label>
+                <Textarea
+                  id="adjust-notes"
+                  value={notes}
+                  onChange={event => setNotes(event.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  placeholder="Detalhes adicionais do caso, anexos ou documentos de apoio."
+                  className="admin-input resize-y"
+                />
+              </div>
+            </div>
+          </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-900/10 px-5 py-4">
-            <p className="text-sm text-stone-700">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm text-stone-700">
+                {summary ? (
+                  <>
+                    Trabalhado{" "}
+                    <strong className="font-serif">
+                      {formatDuration(summary.workedSeconds)}
+                    </strong>{" "}
+                    · Intervalo{" "}
+                    <strong className="font-serif">
+                      {formatDuration(summary.intervalSeconds)}
+                    </strong>
+                  </>
+                ) : (
+                  "Informe os horários para ver o total apurado."
+                )}
+              </p>
               {summary ? (
                 <>
-                  Trabalhado{" "}
-                  <strong className="font-serif">
-                    {formatDuration(summary.workedSeconds)}
-                  </strong>{" "}
-                  · Intervalo{" "}
-                  <strong className="font-serif">
-                    {formatDuration(summary.intervalSeconds)}
-                  </strong>
+                  <span className="tiny-label">Carga</span>
+                  <CargaBadge carga={summary.carga} />
+                  {summary.carga.expectedSeconds > 0 ? (
+                    <span className="text-xs text-stone-500">
+                      esperado {formatDuration(summary.carga.expectedSeconds)}
+                    </span>
+                  ) : null}
                 </>
-              ) : (
-                "Informe os horários para ver o total apurado."
-              )}
-            </p>
+              ) : null}
+            </div>
             <Button
               type="submit"
-              disabled={!dirty || !selectedId || save.isPending}
+              disabled={
+                !dirty ||
+                !selectedId ||
+                save.isPending ||
+                reason.trim().length < MOTIVO_MINIMO
+              }
               className="h-10 rounded-none bg-stone-950 text-xs tracking-[0.14em]"
             >
               {save.isPending ? (

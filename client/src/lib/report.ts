@@ -1,3 +1,10 @@
+import {
+  calculateCargaTotals,
+  type CargaEvaluation,
+  type CargaSituation,
+  type CargaTotals,
+} from "@shared/carga";
+
 export const MONTHS = [
   "JANEIRO",
   "FEVEREIRO",
@@ -31,9 +38,14 @@ export type DayRow = {
   isHoliday: boolean;
   holidayDescription: string;
   marked: boolean;
+  carga: CargaEvaluation | null;
 };
 
-export type ReportDay = { day: number; records: PointRecord[] };
+export type ReportDay = {
+  day: number;
+  records: PointRecord[];
+  summary?: { carga?: CargaEvaluation | null } | null;
+};
 
 export function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
@@ -75,8 +87,8 @@ export function buildDayRows(
   days: ReportDay[],
   holidays?: HolidayEntry[],
 ): DayRow[] {
-  const byDay = new Map<number, PointRecord[]>();
-  (days ?? []).forEach(entry => byDay.set(entry.day, entry.records));
+  const byDay = new Map<number, ReportDay>();
+  (days ?? []).forEach(entry => byDay.set(entry.day, entry));
   const holidaysByDate = new Map((holidays ?? []).map(h => [h.date, h.description ?? "FERIADO"]));
   const count = daysInMonth(year, month);
   const rows: DayRow[] = [];
@@ -85,7 +97,8 @@ export function buildDayRows(
     const weekend = isWeekend(year, month, day);
     const holidayDesc = holidaysByDate.get(dateKey);
     const isHoliday = weekend || Boolean(holidayDesc);
-    const records = byDay.get(day) ?? [];
+    const reportDay = byDay.get(day);
+    const records = reportDay?.records ?? [];
     const time = (type: string) => formatReportHour(records.find(r => r.type === type)?.recordedAt);
     const coords = (type: string) => recordCoordinates(records, type);
     rows.push({
@@ -102,9 +115,14 @@ export function buildDayRows(
       isHoliday,
       holidayDescription: holidayDesc ?? (weekend ? "Fim de semana" : ""),
       marked: Boolean(holidayDesc),
+      carga: records.length ? reportDay?.summary?.carga ?? null : null,
     });
   }
   return rows;
+}
+
+export function cargaTotals(rows: DayRow[]): CargaTotals {
+  return calculateCargaTotals(rows);
 }
 
 export function capitalize(value: string): string {

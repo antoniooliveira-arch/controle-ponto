@@ -1,6 +1,16 @@
+import { formatSignedDuration, type CargaSituation } from "@shared/carga";
+import { CARGA_SITUACAO_CURTA } from "@/components/CargaIndicador";
 import { MONTHS, type DayRow } from "@/lib/report";
 
 const HEADERS = ["DIA", "SEM", "ENTRADA", "ASSINATURA", "SAÍDA", "ENTRADA", "SAÍDA", "ASSINATURA", "RESP/DIRETO"];
+
+const CARGA_CELL_STYLE: Partial<Record<CargaSituation, { className: string; title: string }>> = {
+  EXCEDENTE: { className: "text-amber-700", title: "Excedente" },
+  DEFICITARIO: { className: "text-rose-700", title: "Falta" },
+  SEM_CARGA_PREVISTA: { className: "text-sky-700", title: "Fora da carga prevista" },
+  TOLERANCIA: { className: "text-stone-600", title: "Dentro da tolerância" },
+  DENTRO_DA_CARGA: { className: "text-emerald-800", title: "Na carga" },
+};
 
 export function TabelaPonto({
   year,
@@ -17,6 +27,26 @@ export function TabelaPonto({
       {coord && <span className="block text-[8px] font-normal text-stone-500">{coord}</span>}
     </span>
   );
+  const cargaMarker = (day: DayRow) => {
+    const carga = day.carga;
+    if (!carga || carga.situation === "EM_ANDAMENTO") return null;
+    const style = CARGA_CELL_STYLE[carga.situation];
+    if (!style) return null;
+    const delta =
+      carga.situation === "SEM_CARGA_PREVISTA" && carga.deltaSeconds > 0
+        ? formatSignedDuration(carga.deltaSeconds)
+        : "";
+    return (
+      <span
+        title={`${style.title}${delta ? ` ${delta}` : ""}`}
+        className={`mt-0.5 block text-[9px] font-semibold leading-none ${style.className}`}
+      >
+        {CARGA_SITUACAO_CURTA[carga.situation]}
+        {delta}
+      </span>
+    );
+  };
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-[11px] leading-none">
@@ -48,6 +78,7 @@ export function TabelaPonto({
               <td className="border border-stone-800/70 px-1.5 py-1 text-center font-medium">{day.weekday}</td>
               <td className={`border border-stone-800/70 px-1.5 py-1 text-center ${day.entrada1 ? "font-semibold text-stone-900" : ""}`}>
                 <PunchCell value={day.entrada1} coord={day.entrada1Coord} />
+                {cargaMarker(day)}
               </td>
               <td className="border border-stone-800/70 px-1.5 py-1 text-left">
                 {day.isHoliday && day.marked && <span className="text-[9px] italic text-stone-400">{day.holidayDescription}</span>}
@@ -68,7 +99,11 @@ export function TabelaPonto({
         </tbody>
       </table>
       <p className="mt-2 text-[10px] italic text-stone-500">
-        * Fim de semana ou feriado — não registrar horários de frequência.
+        * Fim de semana ou feriado — não registrar horários de frequência. · Marcador sob a entrada
+        indica o saldo da carga diária: <span className="font-semibold not-italic">+</span> excedente,{" "}
+        <span className="font-semibold not-italic">−</span> falta,{" "}
+        <span className="font-semibold not-italic">•</span> fora da carga prevista,{" "}
+        <span className="font-semibold not-italic">~</span> tolerância.
       </p>
     </div>
   );

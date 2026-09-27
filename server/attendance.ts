@@ -1,3 +1,5 @@
+import { evaluateCarga, type CargaEvaluation } from "@shared/carga";
+
 export const PUNCH_SEQUENCE = [
   "ENTRADA",
   "SAIDA_INTERVALO",
@@ -18,6 +20,7 @@ export type AttendanceSummary = {
   isComplete: boolean;
   nextType: PunchType | null;
   status: "SEM_ENTRADA" | "TRABALHANDO" | "EM_INTERVALO" | "COMPLETA";
+  carga: CargaEvaluation | null;
 };
 
 export const BUSINESS_TIMEZONE = "America/Cuiaba";
@@ -44,6 +47,7 @@ export function calculateAttendance(
   records: AttendanceRecord[],
   now = new Date(),
   includeOpenDuration = true,
+  expectedSeconds?: number,
 ): AttendanceSummary {
   const byType = new Map(records.map(record => [record.type, record.recordedAt]));
   const entry = byType.get("ENTRADA");
@@ -71,7 +75,16 @@ export function calculateAttendance(
         ? "EM_INTERVALO"
         : "TRABALHANDO";
 
-  return { workedSeconds, intervalSeconds, isComplete: Boolean(finalOut), nextType, status };
+  const carga =
+    expectedSeconds === undefined
+      ? null
+      : evaluateCarga({
+          workedSeconds,
+          expectedSeconds,
+          isComplete: status === "COMPLETA",
+        });
+
+  return { workedSeconds, intervalSeconds, isComplete: Boolean(finalOut), nextType, status, carga };
 }
 
 export function formatDuration(totalSeconds: number): string {

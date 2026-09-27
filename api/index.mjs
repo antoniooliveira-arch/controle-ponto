@@ -33,6 +33,48 @@ import { and, asc, desc, eq, gte, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
+// shared/carga.ts
+var CARGA_SEMANAL_PADRAO = 40;
+var DIAS_UTEIS_SEMANA = 5;
+var TOLERANCIA_SEGUNDOS = 10 * 60;
+var MINUTES_PER_HOUR = 60;
+var SECONDS_PER_MINUTE = 60;
+var DAY_IN_MS = 24 * 60 * 60 * 1e3;
+var SUNDAY = 0;
+var SATURDAY = 6;
+function parseBusinessDate(businessDate) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(businessDate);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+function isWeekendDate(businessDate) {
+  const date = parseBusinessDate(businessDate);
+  if (!date) return false;
+  const weekday = date.getUTCDay();
+  return weekday === SUNDAY || weekday === SATURDAY;
+}
+function cargaMinutosDiarios(cargaSemanal, businessDate) {
+  const semanal = normaliseCargaSemanal(cargaSemanal);
+  if (isWeekendDate(businessDate)) return 0;
+  return Math.round(semanal * MINUTES_PER_HOUR / DIAS_UTEIS_SEMANA);
+}
+function cargaSegundosDiarios(cargaSemanal, businessDate) {
+  return cargaMinutosDiarios(cargaSemanal, businessDate) * SECONDS_PER_MINUTE;
+}
+function evaluateCarga(input) {
+  const tolerance = Math.max(0, input.toleranceSeconds ?? TOLERANCIA_SEGUNDOS);
+  const expected = Math.max(0, input.expectedSeconds);
+  const worked = Math.max(0, input.workedSeconds);
+  const deltaSeconds = worked - expected;
+  const situation = !input.isComplete ? "EM_ANDAMENTO" : expected === 0 ? "SEM_CARGA_PREVISTA" : deltaSeconds === 0 ? "DENTRO_DA_CARGA" : Math.abs(deltaSeconds) <= tolerance ? "TOLERANCIA" : deltaSeconds > 0 ? "EXCEDENTE" : "DEFICITARIO";
+  return { expectedSeconds: expected, workedSeconds: worked, deltaSeconds, situation };
+}
+function normaliseCargaSemanal(cargaSemanal) {
+  return typeof cargaSemanal === "number" && Number.isFinite(cargaSemanal) && cargaSemanal > 0 ? Math.round(cargaSemanal) : CARGA_SEMANAL_PADRAO;
+}
+
 // drizzle/schema.ts
 import {
   boolean,
@@ -91,7 +133,7 @@ var employees = pgTable(
     funcao: varchar("funcao", { length: 180 }),
     cargo: varchar("cargo", { length: 180 }),
     lotacaoLocal: varchar("lotacaoLocal", { length: 180 }),
-    cargaHoraria: varchar("cargaHoraria", { length: 20 }).default("8h"),
+    cargaHorariaSemanal: integer("cargaHorariaSemanal").default(40).notNull(),
     passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
     active: boolean("active").default(true).notNull(),
     passwordFailures: integer("passwordFailures").default(0).notNull(),
@@ -199,6 +241,32 @@ var reportLogs = pgTable(
   },
   (table) => [index("report_logs_employee_month_year_idx").on(table.employeeId, table.month, table.year)]
 );
+var punchAuditAction = ["INSERT", "UPDATE", "DELETE"];
+var punchAuditActionEnum = pgEnum("punch_audit_action", punchAuditAction);
+var punchAuditLog = pgTable(
+  "punch_audit_log",
+  {
+    id: serial("id").primaryKey(),
+    employeeId: integer("employeeId").references(() => employees.id, { onDelete: "set null" }),
+    employeeName: varchar("employeeName", { length: 180 }).notNull(),
+    registration: varchar("registration", { length: 64 }),
+    workdayId: integer("workdayId").references(() => workdays.id, { onDelete: "set null" }),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    action: punchAuditActionEnum("action").notNull(),
+    punchType: timeRecordTypeEnum("punchType").notNull(),
+    previousRecordedAt: timestamp("previousRecordedAt"),
+    newRecordedAt: timestamp("newRecordedAt"),
+    reason: varchar("reason", { length: 400 }).notNull(),
+    notes: text("notes"),
+    adjustedById: integer("adjustedById").references(() => users.id, { onDelete: "set null" }),
+    adjustedBy: varchar("adjustedBy", { length: 180 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull()
+  },
+  (table) => [
+    index("punch_audit_log_employee_date_idx").on(table.employeeId, table.businessDate),
+    index("punch_audit_log_created_at_idx").on(table.createdAt)
+  ]
+);
 
 // server/attendance.ts
 var PUNCH_SEQUENCE = [
@@ -223,7 +291,7 @@ function getNextPunchType(records) {
   if (!hasValidSequence) return null;
   return PUNCH_SEQUENCE[records.length] ?? null;
 }
-function calculateAttendance(records, now = /* @__PURE__ */ new Date(), includeOpenDuration = true) {
+function calculateAttendance(records, now = /* @__PURE__ */ new Date(), includeOpenDuration = true, expectedSeconds) {
   const byType = new Map(records.map((record) => [record.type, record.recordedAt]));
   const entry = byType.get("ENTRADA");
   const intervalOut = byType.get("SAIDA_INTERVALO");
@@ -239,7 +307,74 @@ function calculateAttendance(records, now = /* @__PURE__ */ new Date(), includeO
   }
   const nextType = getNextPunchType(records);
   const status = !entry ? "SEM_ENTRADA" : finalOut ? "COMPLETA" : intervalOut && !intervalReturn ? "EM_INTERVALO" : "TRABALHANDO";
-  return { workedSeconds, intervalSeconds, isComplete: Boolean(finalOut), nextType, status };
+  const carga = expectedSeconds === void 0 ? null : evaluateCarga({
+    workedSeconds,
+    expectedSeconds,
+    isComplete: status === "COMPLETA"
+  });
+  return { workedSeconds, intervalSeconds, isComplete: Boolean(finalOut), nextType, status, carga };
+}
+
+// server/audit.ts
+var MOTIVO_MINIMO = 10;
+function normaliseAuditReason(reason, notes) {
+  const trimmedReason = reason.trim();
+  if (trimmedReason.length < MOTIVO_MINIMO) {
+    throw new Error(
+      `Informe a justificativa do ajuste com ao menos ${MOTIVO_MINIMO} caracteres.`
+    );
+  }
+  const trimmedNotes = notes?.trim() || null;
+  return { reason: trimmedReason, notes: trimmedNotes };
+}
+function buildPunchAuditEntries(input) {
+  const { reason, notes } = normaliseAuditReason(input.reason, input.notes);
+  const currentByType = new Map(input.existing.map((record) => [record.type, record]));
+  const entries = [];
+  const base = {
+    employeeId: input.employeeId,
+    employeeName: input.employeeName,
+    registration: input.registration ?? null,
+    workdayId: input.workdayId,
+    businessDate: input.businessDate,
+    reason,
+    notes,
+    adjustedById: input.adjustedById,
+    adjustedBy: input.adjustedBy,
+    createdAt: input.at
+  };
+  for (const [type, recordedAt] of Array.from(input.desired)) {
+    const current = currentByType.get(type);
+    if (!current) {
+      entries.push({
+        ...base,
+        action: "INSERT",
+        punchType: type,
+        previousRecordedAt: null,
+        newRecordedAt: recordedAt
+      });
+      continue;
+    }
+    if (current.recordedAt.getTime() === recordedAt.getTime()) continue;
+    entries.push({
+      ...base,
+      action: "UPDATE",
+      punchType: type,
+      previousRecordedAt: current.recordedAt,
+      newRecordedAt: recordedAt
+    });
+  }
+  for (const record of input.existing) {
+    if (input.desired.has(record.type)) continue;
+    entries.push({
+      ...base,
+      action: "DELETE",
+      punchType: record.type,
+      previousRecordedAt: record.recordedAt,
+      newRecordedAt: null
+    });
+  }
+  return entries;
 }
 
 // server/_core/env.ts
@@ -382,7 +517,7 @@ function toEmployeeView(employee, sectorName = null) {
     funcao: employee.funcao,
     cargo: employee.cargo,
     lotacaoLocal: employee.lotacaoLocal,
-    cargaHoraria: employee.cargaHoraria,
+    cargaHorariaSemanal: employee.cargaHorariaSemanal,
     active: employee.active,
     lockedUntil: employee.lockedUntil,
     createdAt: employee.createdAt
@@ -398,7 +533,7 @@ function toReportEmployeeView(employee, sectorName = null) {
     funcao: employee.funcao ?? "",
     cargo: employee.cargo ?? "",
     lotacaoLocal: employee.lotacaoLocal ?? sectorName ?? "",
-    cargaHoraria: employee.cargaHoraria ?? "8h"
+    cargaHorariaSemanal: normaliseCargaSemanal(employee.cargaHorariaSemanal)
   };
 }
 async function listActiveEmployeesForLogin() {
@@ -445,8 +580,12 @@ async function revokeEmployeeSession(token) {
 async function getEmployeeToday(employeeId) {
   const db = await requireDb();
   const businessDate = getBusinessDate();
-  const records = await db.select({ id: timeRecords.id, type: timeRecords.type, recordedAt: timeRecords.recordedAt, latitude: timeRecords.latitude, longitude: timeRecords.longitude }).from(timeRecords).where(and(eq(timeRecords.employeeId, employeeId), eq(timeRecords.businessDate, businessDate))).orderBy(asc(timeRecords.recordedAt));
-  return { businessDate, records, summary: calculateAttendance(records) };
+  const [employee, records] = await Promise.all([
+    db.select({ cargaHorariaSemanal: employees.cargaHorariaSemanal }).from(employees).where(eq(employees.id, employeeId)).limit(1),
+    db.select({ id: timeRecords.id, type: timeRecords.type, recordedAt: timeRecords.recordedAt, latitude: timeRecords.latitude, longitude: timeRecords.longitude }).from(timeRecords).where(and(eq(timeRecords.employeeId, employeeId), eq(timeRecords.businessDate, businessDate))).orderBy(asc(timeRecords.recordedAt))
+  ]);
+  const expectedSeconds = cargaSegundosDiarios(employee[0]?.cargaHorariaSemanal, businessDate);
+  return { businessDate, records, summary: calculateAttendance(records, /* @__PURE__ */ new Date(), true, expectedSeconds) };
 }
 async function registerEmployeePunch(employeeId, location) {
   const db = await requireDb();
@@ -456,6 +595,8 @@ async function registerEmployeePunch(employeeId, location) {
     throw new Error("A coordenada geogr\xE1fica \xE9 obrigat\xF3ria e inv\xE1lida. A batida n\xE3o foi registrada.");
   }
   return db.transaction(async (tx) => {
+    const employee = (await tx.select({ cargaHorariaSemanal: employees.cargaHorariaSemanal }).from(employees).where(eq(employees.id, employeeId)).limit(1))[0];
+    const expectedSeconds = cargaSegundosDiarios(employee?.cargaHorariaSemanal, businessDate);
     await tx.insert(workdays).values({ employeeId, businessDate, status: "OPEN" }).onConflictDoUpdate({ target: [workdays.employeeId, workdays.businessDate], set: { updatedAt: now } });
     const workday = (await tx.select().from(workdays).where(and(eq(workdays.employeeId, employeeId), eq(workdays.businessDate, businessDate))).limit(1))[0];
     if (!workday) throw new Error("N\xE3o foi poss\xEDvel inicializar a jornada.");
@@ -477,8 +618,111 @@ async function registerEmployeePunch(employeeId, location) {
       await tx.update(workdays).set({ status: "COMPLETE", updatedAt: now }).where(eq(workdays.id, workday.id));
     }
     const records = [...existing, { type: expected, recordedAt: now }];
-    return { businessDate, recordedType: expected, records, summary: calculateAttendance(records, now) };
+    return {
+      businessDate,
+      recordedType: expected,
+      records,
+      summary: calculateAttendance(records, now, true, expectedSeconds)
+    };
   });
+}
+async function getAdminEmployeeDay(employeeId, businessDate) {
+  const db = await requireDb();
+  const employee = (await db.select().from(employees).where(eq(employees.id, employeeId)).limit(1))[0];
+  if (!employee) throw new Error("Servidor n\xE3o encontrado.");
+  const workday = (await db.select().from(workdays).where(and(eq(workdays.employeeId, employeeId), eq(workdays.businessDate, businessDate))).limit(1))[0];
+  const records = workday ? await db.select().from(timeRecords).where(eq(timeRecords.workdayId, workday.id)).orderBy(asc(timeRecords.recordedAt)) : [];
+  return { employeeId, businessDate, workday: workday ?? null, records };
+}
+async function saveEmployeeDayAdjustments(input) {
+  const db = await requireDb();
+  const now = /* @__PURE__ */ new Date();
+  const types = input.records.map((record) => record.type);
+  if (new Set(types).size !== types.length) throw new Error("N\xE3o \xE9 permitido registrar a mesma batida mais de uma vez.");
+  const referencedIds = input.records.map((record) => record.recordId).filter((id) => Boolean(id));
+  if (new Set(referencedIds).size !== referencedIds.length) throw new Error("As refer\xEAncias das batidas s\xE3o inv\xE1lidas.");
+  const audited = normaliseAuditReason(input.reason, input.notes);
+  return db.transaction(async (tx) => {
+    const employee = (await tx.select({ fullName: employees.fullName, registration: employees.registration }).from(employees).where(eq(employees.id, input.employeeId)).limit(1))[0];
+    if (!employee) throw new Error("Servidor n\xE3o encontrado.");
+    await tx.insert(workdays).values({ employeeId: input.employeeId, businessDate: input.businessDate, status: "OPEN" }).onConflictDoUpdate({ target: [workdays.employeeId, workdays.businessDate], set: { updatedAt: now } });
+    const workday = (await tx.select().from(workdays).where(and(eq(workdays.employeeId, input.employeeId), eq(workdays.businessDate, input.businessDate))).limit(1))[0];
+    if (!workday) throw new Error("N\xE3o foi poss\xEDvel localizar a jornada.");
+    const existing = await tx.select().from(timeRecords).where(eq(timeRecords.workdayId, workday.id));
+    const desired = /* @__PURE__ */ new Map();
+    for (const record of input.records) {
+      desired.set(record.type, { recordId: record.recordId, recordedAt: new Date(record.recordedAt) });
+    }
+    for (const [type, value] of Array.from(desired.entries())) {
+      const current = existing.find((record) => record.type === type);
+      if (value.recordId != null && current && value.recordId !== current.id) {
+        throw new Error("A batida informada n\xE3o pertence \xE0 jornada deste servidor.");
+      }
+    }
+    const auditEntries = buildPunchAuditEntries({
+      employeeId: input.employeeId,
+      employeeName: employee.fullName,
+      registration: employee.registration,
+      workdayId: workday.id,
+      businessDate: input.businessDate,
+      existing: existing.map((record) => ({ type: record.type, recordedAt: record.recordedAt })),
+      desired: new Map(Array.from(desired.entries()).map(([type, value]) => [type, value.recordedAt])),
+      reason: audited.reason,
+      notes: audited.notes,
+      adjustedById: input.admin.id,
+      adjustedBy: input.admin.name,
+      at: now
+    });
+    if (auditEntries.length) await tx.insert(punchAuditLog).values(auditEntries);
+    for (const record of existing) {
+      if (!desired.has(record.type)) {
+        await tx.delete(timeRecords).where(eq(timeRecords.id, record.id));
+      }
+    }
+    for (const [type, value] of Array.from(desired.entries())) {
+      const current = existing.find((record) => record.type === type);
+      if (current) {
+        if (current.recordedAt.getTime() === value.recordedAt.getTime()) continue;
+        await tx.update(timeRecords).set({ recordedAt: value.recordedAt }).where(eq(timeRecords.id, current.id));
+      } else {
+        await tx.insert(timeRecords).values({
+          workdayId: workday.id,
+          employeeId: input.employeeId,
+          businessDate: input.businessDate,
+          type,
+          recordedAt: value.recordedAt,
+          latitude: null,
+          longitude: null
+        });
+      }
+    }
+    const hasFinal = desired.has("SAIDA_FINAL");
+    await tx.update(workdays).set({ status: hasFinal ? "COMPLETE" : "OPEN", updatedAt: now }).where(eq(workdays.id, workday.id));
+    return { success: true, businessDate: input.businessDate, auditEntries: auditEntries.length };
+  });
+}
+async function listPunchAudit(input) {
+  const db = await requireDb();
+  const conditions = [];
+  if (input.employeeId) conditions.push(eq(punchAuditLog.employeeId, input.employeeId));
+  if (input.startDate) conditions.push(gte(punchAuditLog.businessDate, input.startDate));
+  if (input.endDate) conditions.push(lte(punchAuditLog.businessDate, input.endDate));
+  const limit = Math.min(Math.max(input.limit ?? 100, 1), 200);
+  return db.select({
+    id: punchAuditLog.id,
+    employeeId: punchAuditLog.employeeId,
+    employeeName: punchAuditLog.employeeName,
+    registration: punchAuditLog.registration,
+    businessDate: punchAuditLog.businessDate,
+    action: punchAuditLog.action,
+    punchType: punchAuditLog.punchType,
+    previousRecordedAt: punchAuditLog.previousRecordedAt,
+    newRecordedAt: punchAuditLog.newRecordedAt,
+    reason: punchAuditLog.reason,
+    notes: punchAuditLog.notes,
+    adjustedBy: punchAuditLog.adjustedBy,
+    createdAt: punchAuditLog.createdAt
+  }).from(punchAuditLog).where(conditions.length ? and(...conditions) : void 0).orderBy(desc(punchAuditLog.createdAt), desc(punchAuditLog.id)).limit(limit);
 }
 async function listSectors() {
   const db = await requireDb();
@@ -508,7 +752,7 @@ async function createEmployee(input) {
     funcao: input.funcao?.trim() || null,
     cargo: input.cargo?.trim() || null,
     lotacaoLocal: input.lotacaoLocal?.trim() || null,
-    cargaHoraria: input.cargaHoraria?.trim() || null,
+    cargaHorariaSemanal: normaliseCargaSemanal(input.cargaHorariaSemanal),
     passwordHash
   }).returning({ id: employees.id });
   return result[0].id;
@@ -522,7 +766,7 @@ async function updateEmployee(employeeId, input) {
     funcao: input.funcao?.trim() || null,
     cargo: input.cargo?.trim() || null,
     lotacaoLocal: input.lotacaoLocal?.trim() || null,
-    cargaHoraria: input.cargaHoraria?.trim() || null,
+    cargaHorariaSemanal: normaliseCargaSemanal(input.cargaHorariaSemanal),
     active: input.active
   }).where(eq(employees.id, employeeId));
   if (!input.active) {
@@ -549,7 +793,12 @@ async function getAdminDashboard(businessDate = getBusinessDate()) {
     businessDate,
     rows: employeeRows.map(({ employee, sectorName }) => {
       const employeeRecords = byEmployee.get(employee.id) ?? [];
-      return { employee: toEmployeeView(employee, sectorName), records: employeeRecords, summary: calculateAttendance(employeeRecords) };
+      const expectedSeconds = cargaSegundosDiarios(employee.cargaHorariaSemanal, businessDate);
+      return {
+        employee: toEmployeeView(employee, sectorName),
+        records: employeeRecords,
+        summary: calculateAttendance(employeeRecords, /* @__PURE__ */ new Date(), true, expectedSeconds)
+      };
     })
   };
 }
@@ -569,11 +818,12 @@ async function getAttendanceReport(input) {
   return Array.from(grouped.entries()).map(([key, dayRecords]) => {
     const [employeeIdText, businessDate] = key.split("|");
     const employee = employeesById.get(Number(employeeIdText));
+    const expectedSeconds = cargaSegundosDiarios(employee?.cargaHorariaSemanal, businessDate);
     return {
       businessDate,
       employee: employee ? toEmployeeView(employee) : null,
       records: dayRecords,
-      summary: calculateAttendance(dayRecords, /* @__PURE__ */ new Date(), false)
+      summary: calculateAttendance(dayRecords, /* @__PURE__ */ new Date(), false, expectedSeconds)
     };
   });
 }
@@ -621,10 +871,25 @@ async function getMonthlyReport(input) {
     year: input.year,
     startDate,
     endDate,
-    days: Array.from({ length: daysInMonth }, (_, index2) => index2 + 1).map((day) => ({
-      day,
-      records: dayRecords[day] ?? []
-    }))
+    days: Array.from({ length: daysInMonth }, (_, index2) => index2 + 1).map((day) => {
+      const dayRecordsForDay = dayRecords[day] ?? [];
+      const businessDate = `${startDate.slice(0, 8)}${String(day).padStart(2, "0")}`;
+      const expectedSeconds = cargaSegundosDiarios(employeeRow.employee.cargaHorariaSemanal, businessDate);
+      return {
+        day,
+        businessDate,
+        records: dayRecordsForDay,
+        summary: calculateAttendance(
+          dayRecordsForDay.map((record) => ({
+            type: record.type,
+            recordedAt: record.recordedAt
+          })),
+          /* @__PURE__ */ new Date(),
+          false,
+          expectedSeconds
+        )
+      };
+    })
   };
 }
 async function listReportLogs(limit = 50) {
@@ -903,6 +1168,31 @@ var appRouter = router({
   }),
   admin: router({
     dashboard: adminProcedure.input(z2.object({ businessDate: dateSchema.optional() })).query(({ input }) => getAdminDashboard(input.businessDate)),
+    dayDetail: adminProcedure.input(z2.object({ employeeId: z2.number().int().positive(), businessDate: dateSchema })).query(({ input }) => getAdminEmployeeDay(input.employeeId, input.businessDate)),
+    saveDayAdjustments: adminProcedure.input(z2.object({
+      employeeId: z2.number().int().positive(),
+      businessDate: dateSchema,
+      records: z2.array(z2.object({
+        type: z2.enum(timeRecordType),
+        recordId: z2.number().int().positive().nullable().optional(),
+        recordedAt: z2.string().min(1)
+      })).max(4),
+      reason: z2.string().trim().min(10, "Informe a justificativa do ajuste com ao menos 10 caracteres.").max(400),
+      notes: z2.string().trim().max(1e3).nullable().optional()
+    })).mutation(({ ctx, input }) => saveEmployeeDayAdjustments({
+      employeeId: input.employeeId,
+      businessDate: input.businessDate,
+      records: input.records,
+      reason: input.reason,
+      notes: input.notes ?? null,
+      admin: { id: ctx.user.id, name: ctx.user.name ?? ctx.user.email ?? "Administrador" }
+    })),
+    punchAudit: adminProcedure.input(z2.object({
+      employeeId: z2.number().int().positive().nullable().optional(),
+      startDate: dateSchema.nullable().optional(),
+      endDate: dateSchema.nullable().optional(),
+      limit: z2.number().int().min(1).max(200).optional()
+    })).query(({ input }) => listPunchAudit(input)),
     employees: adminProcedure.query(() => listEmployees()),
     sectors: adminProcedure.query(() => listSectors()),
     createSector: adminProcedure.input(z2.object({ name: z2.string().trim().min(2).max(120) })).mutation(({ input }) => createSector(input.name)),
@@ -914,7 +1204,7 @@ var appRouter = router({
       funcao: z2.string().trim().max(180).nullable().optional(),
       cargo: z2.string().trim().max(180).nullable().optional(),
       lotacaoLocal: z2.string().trim().max(180).nullable().optional(),
-      cargaHoraria: z2.string().trim().max(20).nullable().optional(),
+      cargaHorariaSemanal: z2.number().int().min(4).max(60).nullable().optional(),
       password: employeePasswordSchema
     })).mutation(({ input }) => createEmployee(input)),
     updateEmployee: adminProcedure.input(z2.object({
@@ -925,7 +1215,7 @@ var appRouter = router({
       funcao: z2.string().trim().max(180).nullable().optional(),
       cargo: z2.string().trim().max(180).nullable().optional(),
       lotacaoLocal: z2.string().trim().max(180).nullable().optional(),
-      cargaHoraria: z2.string().trim().max(20).nullable().optional(),
+      cargaHorariaSemanal: z2.number().int().min(4).max(60).nullable().optional(),
       active: z2.boolean()
     })).mutation(({ input }) => updateEmployee(input.employeeId, input)),
     resetPassword: adminProcedure.input(z2.object({ employeeId: z2.number().int().positive(), password: employeePasswordSchema })).mutation(({ input }) => resetEmployeePassword(input.employeeId, input.password)),

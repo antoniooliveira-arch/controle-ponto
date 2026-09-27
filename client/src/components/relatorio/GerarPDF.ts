@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { calculateCargaTotals, formatDuration, formatSignedDuration, formatWeeklyLoad } from "@shared/carga";
 import { MONTHS, type DayRow } from "@/lib/report";
 
 export type ReportEmployeeInfo = {
@@ -8,7 +9,7 @@ export type ReportEmployeeInfo = {
   funcao: string;
   cargo: string;
   lotacaoLocal: string;
-  cargaHoraria: string;
+  cargaHorariaSemanal: number;
 };
 
 export type ReportPdfData = {
@@ -29,6 +30,14 @@ const COORDINATE_COLUMNS: Record<number, "entrada1Coord" | "saida1Coord" | "entr
   4: "saida1Coord",
   5: "entrada2Coord",
   6: "saida2Coord",
+};
+
+const CARGA_PDF_MARKS: Record<string, string> = {
+  DENTRO_DA_CARGA: "=",
+  TOLERANCIA: "~",
+  EXCEDENTE: "+",
+  DEFICITARIO: "-",
+  SEM_CARGA_PREVISTA: "•",
 };
 
 function drawLabeledValue(
@@ -101,7 +110,7 @@ export function generateReportPdf(data: ReportPdfData): jsPDF {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(90, 90, 85);
-  doc.text(employee.cargaHoraria, PAGE_WIDTH / 2 - 18, 55);
+  doc.text(formatWeeklyLoad(employee.cargaHorariaSemanal), PAGE_WIDTH / 2 - 18, 55);
 
   const holidayDays = new Map<number, DayRow>();
   days.forEach(day => {
@@ -179,8 +188,35 @@ export function generateReportPdf(data: ReportPdfData): jsPDF {
     didDrawCell: data => {
       if (data.section !== "body") return;
       const day = days[data.row.index];
+      if (!day) return;
+      if (data.column.index === 2) {
+        const carga = day.carga;
+        if (carga && carga.situation !== "EM_ANDAMENTO") {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(6.4);
+          const color =
+            carga.situation === "EXCEDENTE"
+              ? [166, 108, 12]
+              : carga.situation === "DEFICITARIO"
+                ? [176, 52, 62]
+                : carga.situation === "SEM_CARGA_PREVISTA"
+                  ? [22, 101, 152]
+                  : [90, 90, 85];
+          doc.setTextColor(color[0], color[1], color[2]);
+          const delta =
+            carga.situation === "SEM_CARGA_PREVISTA" && carga.deltaSeconds > 0
+              ? ` ${formatSignedDuration(carga.deltaSeconds)}`
+              : "";
+          doc.text(
+            `${CARGA_PDF_MARKS[carga.situation] ?? ""}${delta}`,
+            data.cell.x + data.cell.width / 2,
+            data.cell.y + data.cell.height - 1.5,
+            { align: "center" },
+          );
+        }
+      }
       const coordinateKey = COORDINATE_COLUMNS[data.column.index];
-      const coordinate = coordinateKey ? day?.[coordinateKey] : null;
+      const coordinate = coordinateKey ? day[coordinateKey] : null;
       if (!coordinate) return;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(5);
@@ -190,6 +226,32 @@ export function generateReportPdf(data: ReportPdfData): jsPDF {
   });
 
   const tableBottom = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? startY + 40;
+
+  const totals = calculateCargaTotals(days);
+  if (totals.diasExcesso || totals.diasFalta || totals.diasRegulares) {
+    const summaryY = Math.min(tableBottom + 7, 197);
+    doc.setDrawColor(150, 150, 142);
+    doc.setLineWidth(0.2);
+    doc.line(MARGIN, summaryY - 4.5, PAGE_WIDTH - MARGIN, summaryY - 4.5);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.2);
+    doc.setTextColor(ink[0], ink[1], ink[2]);
+    doc.text(
+      `Carga apurada ${formatDuration(totals.totalWorkedSeconds)} · Carga prevista ${formatDuration(totals.totalExpectedSeconds)} · Saldo ${formatSignedDuration(totals.netDeltaSeconds)}`,
+      MARGIN,
+      summaryY,
+    );
+    doc.setFontSize(6.6);
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    doc.text(
+      `Excesso: ${totals.diasExcesso} dia(s) ${totals.diasExcesso ? `(${formatDuration(totals.segundosExcesso)})` : ""} · ` +
+        `Falta: ${totals.diasFalta} dia(s) ${totals.diasFalta ? `(${formatDuration(totals.segundosFalta)})` : ""} · ` +
+        `Na carga/tolerância: ${totals.diasRegulares} dia(s) · ` +
+        `Marcadores: + excedente, - falta, • fora da carga prevista, ~ tolerância, = na carga`,
+      MARGIN,
+      summaryY + 4.4,
+    );
+  }
 
   doc.setFont("helvetica", "italic");
   doc.setFontSize(7);

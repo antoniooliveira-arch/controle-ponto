@@ -1,3 +1,4 @@
+import { CARGA_SEMANAL_PADRAO, calculateCargaTotals } from "@shared/carga";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -72,6 +73,8 @@ export function RelatorioPonto() {
     [dayRows],
   );
 
+  const cargaTotals = useMemo(() => calculateCargaTotals(dayRows), [dayRows]);
+
   const logReport = trpc.admin.logReport.useMutation({
     onSuccess: () => utils.admin.reportLogs.invalidate(),
   });
@@ -85,7 +88,7 @@ export function RelatorioPonto() {
         funcao: selectedEmployee.funcao ?? "",
         cargo: selectedEmployee.cargo ?? "",
         lotacaoLocal: selectedEmployee.lotacaoLocal ?? selectedEmployee.sectorName ?? "",
-        cargaHoraria: selectedEmployee.cargaHoraria ?? "8h",
+        cargaHorariaSemanal: selectedEmployee.cargaHorariaSemanal ?? CARGA_SEMANAL_PADRAO,
       },
       month: report.data.month,
       year: report.data.year,
@@ -248,7 +251,8 @@ export function RelatorioPonto() {
           <div className="mt-10">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <p className="tiny-label">
-                Folha de {daysCount} dias · {holidaysCount} {holidaysCount === 1 ? "feriado/fim de semana" : "feriados/fins de semana"}
+                Folha de {daysCount} dias · {holidaysCount} {holidaysCount === 1 ? "feriado/fim de semana" : "feriados/fins de semana"} ·{" "}
+                {cargaTotals.diasExcesso} com excesso · {cargaTotals.diasFalta} com falta
               </p>
               <div className="flex gap-2">
                 <Button
@@ -277,7 +281,7 @@ export function RelatorioPonto() {
                 funcao: selectedEmployee.funcao ?? "",
                 cargo: selectedEmployee.cargo ?? "",
                 lotacaoLocal: selectedEmployee.lotacaoLocal ?? selectedEmployee.sectorName ?? "",
-                cargaHoraria: selectedEmployee.cargaHoraria ?? "8h",
+                cargaHorariaSemanal: selectedEmployee.cargaHorariaSemanal ?? CARGA_SEMANAL_PADRAO,
               }}
               month={month}
               year={year}

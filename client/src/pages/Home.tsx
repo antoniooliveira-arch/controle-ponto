@@ -1,3 +1,4 @@
+import { CargaBadge } from "@/components/CargaIndicador";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -179,7 +180,8 @@ function EmployeeDashboard({ employee }: { employee: { fullName: string; registr
             <div className="mb-7 flex items-end justify-between"><div><p className="tiny-label">Ritmo de hoje</p><p className="mt-2 font-serif text-2xl">{doneCount} de 4 registros</p></div><span className="text-xs tracking-[0.15em] text-stone-500">{summary?.isComplete ? "COMPLETA" : "EM CURSO"}</span></div>
             <div className="h-px bg-stone-900/15"><div className="h-px bg-stone-900 transition-all" style={{ width: `${doneCount * 25}%` }} /></div>
             <dl className="mt-8 grid grid-cols-2 gap-6"><div><dt className="tiny-label">Trabalhado</dt><dd className="mt-2 font-serif text-3xl">{formatDuration(summary?.workedSeconds ?? 0)}</dd></div><div><dt className="tiny-label">Intervalo</dt><dd className="mt-2 font-serif text-3xl">{formatDuration(summary?.intervalSeconds ?? 0)}</dd></div></dl>
-            <p className="mt-8 border-t border-stone-900/15 pt-5 text-sm leading-relaxed text-stone-600">Os horários são definidos pelo servidor da aplicação e a sequência não pode ser alterada nesta tela.</p>
+            <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-stone-900/15 pt-5"><span className="tiny-label">Carga horária</span><CargaBadge carga={summary?.carga} />{summary?.carga && summary.carga.expectedSeconds > 0 ? <span className="text-xs text-stone-500">esperado {formatDuration(summary.carga.expectedSeconds)}</span> : null}</div>
+            <p className="mt-6 border-t border-stone-900/15 pt-5 text-sm leading-relaxed text-stone-600">Os horários são definidos pelo servidor da aplicação e a sequência não pode ser alterada nesta tela.</p>
           </aside>
         </section>
 

@@ -59,7 +59,7 @@ export const employees = pgTable(
     funcao: varchar("funcao", { length: 180 }),
     cargo: varchar("cargo", { length: 180 }),
     lotacaoLocal: varchar("lotacaoLocal", { length: 180 }),
-    cargaHoraria: varchar("cargaHoraria", { length: 20 }).default("8h"),
+    cargaHorariaSemanal: integer("cargaHorariaSemanal").default(40).notNull(),
     passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
     active: boolean("active").default(true).notNull(),
     passwordFailures: integer("passwordFailures").default(0).notNull(),
@@ -176,7 +176,37 @@ export const reportLogs = pgTable(
   table => [index("report_logs_employee_month_year_idx").on(table.employeeId, table.month, table.year)],
 );
 
+export const punchAuditAction = ["INSERT", "UPDATE", "DELETE"] as const;
+
+const punchAuditActionEnum = pgEnum("punch_audit_action", punchAuditAction);
+
+export const punchAuditLog = pgTable(
+  "punch_audit_log",
+  {
+    id: serial("id").primaryKey(),
+    employeeId: integer("employeeId").references(() => employees.id, { onDelete: "set null" }),
+    employeeName: varchar("employeeName", { length: 180 }).notNull(),
+    registration: varchar("registration", { length: 64 }),
+    workdayId: integer("workdayId").references(() => workdays.id, { onDelete: "set null" }),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    action: punchAuditActionEnum("action").notNull(),
+    punchType: timeRecordTypeEnum("punchType").notNull(),
+    previousRecordedAt: timestamp("previousRecordedAt"),
+    newRecordedAt: timestamp("newRecordedAt"),
+    reason: varchar("reason", { length: 400 }).notNull(),
+    notes: text("notes"),
+    adjustedById: integer("adjustedById").references(() => users.id, { onDelete: "set null" }),
+    adjustedBy: varchar("adjustedBy", { length: 180 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    index("punch_audit_log_employee_date_idx").on(table.employeeId, table.businessDate),
+    index("punch_audit_log_created_at_idx").on(table.createdAt),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Employee = typeof employees.$inferSelect;
 export type TimeRecord = typeof timeRecords.$inferSelect;
+export type PunchAuditEntry = typeof punchAuditLog.$inferSelect;

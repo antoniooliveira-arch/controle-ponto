@@ -1,6 +1,42 @@
+import { calculateCargaTotals, formatDuration, formatSignedDuration, formatWeeklyLoad } from "@shared/carga";
 import { MONTHS, type DayRow } from "@/lib/report";
 import { cn } from "@/lib/utils";
 import { TabelaPonto } from "./TabelaPonto";
+
+function CargaResumo({ days }: { days: DayRow[] }) {
+  const totals = calculateCargaTotals(days);
+  if (!totals.diasExcesso && !totals.diasFalta && !totals.diasRegulares) return null;
+  return (
+    <div className="mt-3 border-t border-stone-800/60 pt-2 text-[10px] leading-relaxed text-stone-700">
+      <p>
+        Carga apurada{" "}
+        <span className="font-semibold text-stone-900">
+          {formatDuration(totals.totalWorkedSeconds)}
+        </span>{" "}
+        · Carga prevista{" "}
+        <span className="font-semibold text-stone-900">
+          {formatDuration(totals.totalExpectedSeconds)}
+        </span>{" "}
+        · Saldo{" "}
+        <span
+          className={cn(
+            "font-semibold",
+            totals.netDeltaSeconds > 0 ? "text-amber-700" : totals.netDeltaSeconds < 0 ? "text-rose-700" : "text-emerald-800",
+          )}
+        >
+          {formatSignedDuration(totals.netDeltaSeconds)}
+        </span>
+      </p>
+      <p className="mt-0.5 text-stone-500">
+        Excesso: {totals.diasExcesso} dia(s)
+        {totals.diasExcesso ? ` (${formatDuration(totals.segundosExcesso)})` : ""} · Falta:{" "}
+        {totals.diasFalta} dia(s)
+        {totals.diasFalta ? ` (${formatDuration(totals.segundosFalta)})` : ""} · Na carga ou
+        tolerância: {totals.diasRegulares} dia(s)
+      </p>
+    </div>
+  );
+}
 
 export type PreviewEmployee = {
   fullName: string;
@@ -8,7 +44,7 @@ export type PreviewEmployee = {
   funcao: string;
   cargo: string;
   lotacaoLocal: string;
-  cargaHoraria: string;
+  cargaHorariaSemanal: number;
 };
 
 export function PreviewRelatorio({
@@ -45,12 +81,13 @@ export function PreviewRelatorio({
           <Field label="MATRÍCULA:" value={employee.registration} right />
           <Field label="FUNÇÃO:" value={employee.funcao} />
           <Field label="CARGO:" value={employee.cargo} right />
-          <Field label="LOTAÇÃO/LOCAL:" value={`${employee.lotacaoLocal} · ${employee.cargaHoraria}`} />
+          <Field label="LOTAÇÃO/LOCAL:" value={`${employee.lotacaoLocal} · ${formatWeeklyLoad(employee.cargaHorariaSemanal)}`} />
           <Field label="PERÍODO:" value={`${MONTHS[month - 1]} - ${year}`} right />
         </div>
 
         <div className="mt-3">
           <TabelaPonto year={year} month={month} days={days} />
+          <CargaResumo days={days} />
         </div>
       </div>
     </div>
